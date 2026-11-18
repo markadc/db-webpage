@@ -5,9 +5,29 @@ const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { Client } = require('pg');
+const { Client, types: pgTypes } = require('pg');
 const mysql = require('mysql2/promise');
 const open = require('open').default;
+
+// PostgreSQL: 保持 DATE (1082) 原样输出，TIMESTAMP WITHOUT TIME ZONE (1114) 格式化为 YYYY-MM-DD HH:mm:ss
+pgTypes.setTypeParser(1082, val => val);
+pgTypes.setTypeParser(1114, val => (val ? val.replace('T', ' ').replace(/\.\d+$/, '') : val));
+
+function formatDateTime(d) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function normalizeRows(rows) {
+    if (!Array.isArray(rows)) return rows;
+    return rows.map(row => {
+        const out = {};
+        for (const [k, v] of Object.entries(row)) {
+            out[k] = v instanceof Date ? formatDateTime(v) : v;
+        }
+        return out;
+    });
+}
 
 const app = express();
 const VERSION = require('../package.json').version;
@@ -159,7 +179,8 @@ async function getDbConnection(conn_type, host, port, user, password, dbname) {
             port: parseInt(port, 10),
             user,
             password,
-            database: dbname || undefined
+            database: dbname || undefined,
+            dateStrings: true
         });
     } else {
         const client = new Client({
@@ -395,8 +416,20 @@ app.get('/api/tables', async (req, res) => {
     }
 });
 
+async function getTableColumns(conn, conn_type, table) {
+    if (conn_type === 'mysql') {
+        const [desc] = await conn.query(`DESCRIBE ${quoteIdentifier('mysql', table)}`);
+        return desc.map(d => d.Field);
+    }
+    const descResult = await conn.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public' ORDER BY ordinal_position`,
+        [table]
+    );
+    return descResult.rows.map(r => r.column_name);
+}
+
 app.get('/api/data', async (req, res) => {
-    const { db, table, page = 1, size = 10 } = req.query;
+    const { db, table, page = 1, size = 10, sort_col, sort_dir, filter_col, filter_op, filter_val } = req.query;
     const params = getConnParams(req);
     let conn;
     try {
@@ -405,50 +438,104 @@ app.get('/api/data', async (req, res) => {
         const limit = parseInt(size, 10);
         const offset = (parseInt(page, 10) - 1) * limit;
 
+        let validCols = null;
+        let whereClauseMysql = '';
+        let whereClausePg = '';
+        const whereParams = [];
+
+        if (filter_col) {
+            validCols = await getTableColumns(conn, params.conn_type, table);
+            if (!validCols.includes(filter_col)) {
+                return res.status(400).json({ detail: '无效的筛选字段' });
+            }
+            const qFcol = quoteIdentifier(params.conn_type, filter_col);
+            const op = String(filter_op || 'contains').toLowerCase();
+            if (op === 'isnull') {
+                whereClauseMysql = ` WHERE ${qFcol} IS NULL`;
+                whereClausePg = ` WHERE ${qFcol} IS NULL`;
+            } else if (op === 'notnull') {
+                whereClauseMysql = ` WHERE ${qFcol} IS NOT NULL`;
+                whereClausePg = ` WHERE ${qFcol} IS NOT NULL`;
+            } else if (filter_val !== undefined && filter_val !== '') {
+                const sqlOpMap = { eq: '=', neq: '!=', gt: '>', lt: '<' };
+                if (sqlOpMap[op]) {
+                    whereClauseMysql = ` WHERE ${qFcol} ${sqlOpMap[op]} ?`;
+                    whereClausePg = ` WHERE ${qFcol} ${sqlOpMap[op]} $1`;
+                    whereParams.push(filter_val);
+                } else {
+                    whereClauseMysql = ` WHERE CAST(${qFcol} AS CHAR) LIKE ?`;
+                    whereClausePg = ` WHERE CAST(${qFcol} AS TEXT) ILIKE $1`;
+                    whereParams.push(`%${filter_val}%`);
+                }
+            }
+        }
+
+        let orderClause = '';
+        let activeSortCol = null;
+        let activeSortDir = null;
+        if (sort_col) {
+            if (!validCols) {
+                validCols = await getTableColumns(conn, params.conn_type, table);
+            }
+            if (!validCols.includes(sort_col)) {
+                return res.status(400).json({ detail: '无效的排序字段' });
+            }
+            activeSortCol = sort_col;
+            activeSortDir = String(sort_dir || '').toLowerCase() === 'desc' ? 'desc' : 'asc';
+            orderClause = ` ORDER BY ${quoteIdentifier(params.conn_type, activeSortCol)} ${activeSortDir.toUpperCase()}`;
+        }
+
         if (params.conn_type === 'mysql') {
-            const [[countRows]] = await conn.query(`SELECT COUNT(*) as total FROM ${q}`);
+            const [[countRows]] = await conn.query(`SELECT COUNT(*) as total FROM ${q}${whereClauseMysql}`, whereParams);
             const total = countRows.total;
-            const [rows] = await conn.query(`SELECT * FROM ${q} LIMIT ? OFFSET ?`, [limit, offset]);
+            const [rows] = await conn.query(
+                `SELECT * FROM ${q}${whereClauseMysql}${orderClause} LIMIT ? OFFSET ?`,
+                [...whereParams, limit, offset]
+            );
             let columns = [];
             if (rows.length > 0) {
                 columns = Object.keys(rows[0]);
             } else {
-                const [desc] = await conn.query(`DESCRIBE ${q}`);
-                columns = desc.map(d => d.Field);
+                columns = validCols || await getTableColumns(conn, 'mysql', table);
             }
             const pk = await getPkColumn(conn, 'mysql', table);
             res.json({
                 columns,
-                data: rows,
+                data: normalizeRows(rows),
                 total,
                 page: parseInt(page, 10),
                 size: limit,
                 pages: Math.ceil(total / limit),
-                pk
+                pk,
+                sort_col: activeSortCol,
+                sort_dir: activeSortDir
             });
         } else {
-            const countResult = await conn.query(`SELECT COUNT(*) as total FROM ${q}`);
+            const countResult = await conn.query(`SELECT COUNT(*) as total FROM ${q}${whereClausePg}`, whereParams);
             const total = parseInt(countResult.rows[0].total, 10);
-            const result = await conn.query(`SELECT * FROM ${q} LIMIT $1 OFFSET $2`, [limit, offset]);
+            const limitIdx = whereParams.length + 1;
+            const offsetIdx = whereParams.length + 2;
+            const result = await conn.query(
+                `SELECT * FROM ${q}${whereClausePg}${orderClause} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+                [...whereParams, limit, offset]
+            );
             let columns = [];
             if (result.rows.length > 0) {
                 columns = Object.keys(result.rows[0]);
             } else {
-                const descResult = await conn.query(
-                    `SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public' ORDER BY ordinal_position`,
-                    [table]
-                );
-                columns = descResult.rows.map(r => r.column_name);
+                columns = validCols || await getTableColumns(conn, 'postgresql', table);
             }
             const pk = await getPkColumn(conn, 'postgresql', table);
             res.json({
                 columns,
-                data: result.rows,
+                data: normalizeRows(result.rows),
                 total,
                 page: parseInt(page, 10),
                 size: limit,
                 pages: Math.ceil(total / limit),
-                pk
+                pk,
+                sort_col: activeSortCol,
+                sort_dir: activeSortDir
             });
         }
     } catch (e) {
@@ -504,7 +591,7 @@ app.post('/api/query', async (req, res) => {
             if (hasResult) {
                 const [rows, fields] = await conn.query(sqlStr);
                 const columns = fields ? fields.map(f => f.name) : [];
-                res.json({ columns, data: rows, rowcount: rows.length });
+                res.json({ columns, data: normalizeRows(rows), rowcount: rows.length });
             } else {
                 const [result] = await conn.query(sqlStr);
                 res.json({ columns: [], data: [], rowcount: result.affectedRows || 0 });
@@ -513,7 +600,7 @@ app.post('/api/query', async (req, res) => {
             const result = await conn.query(sqlStr);
             if (result.rows && result.fields) {
                 const columns = result.fields.map(f => f.name);
-                res.json({ columns, data: result.rows, rowcount: result.rows.length });
+                res.json({ columns, data: normalizeRows(result.rows), rowcount: result.rows.length });
             } else {
                 res.json({ columns: [], data: [], rowcount: result.rowCount || 0 });
             }

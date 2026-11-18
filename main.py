@@ -1,5 +1,6 @@
 import os
 import json
+import datetime
 import threading
 import psycopg2
 import pymysql
@@ -254,6 +255,32 @@ async def list_tables(request: Request, db: str = Query(...)):
         conn.close()
 
 
+def get_table_columns(cur, conn_type, table):
+    if conn_type == "mysql":
+        cur.execute(f"DESCRIBE {quote_identifier(conn_type, table)}")
+        return [r.get("Field") for r in cur.fetchall()]
+    cur.execute(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name = %s AND table_schema = 'public' ORDER BY ordinal_position",
+        (table,),
+    )
+    return [r["column_name"] for r in cur.fetchall()]
+
+
+def normalize_row(row):
+    out = {}
+    for k, v in dict(row).items():
+        if isinstance(v, datetime.datetime):
+            if v.tzinfo is not None:
+                v = v.astimezone()
+            out[k] = v.strftime("%Y-%m-%d %H:%M:%S")
+        elif isinstance(v, datetime.date):
+            out[k] = v.strftime("%Y-%m-%d")
+        else:
+            out[k] = v
+    return out
+
+
 @app.get("/api/data")
 async def get_data(
     request: Request,
@@ -261,28 +288,90 @@ async def get_data(
     table: str = Query(...),
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=1000),
+    sort_col: str = Query(None),
+    sort_dir: str = Query("asc"),
+    filter_col: str = Query(None),
+    filter_op: str = Query("contains"),
+    filter_val: str = Query(None),
 ):
     params = get_conn_params(request)
     conn = get_db_connection(**params, dbname=db)
     try:
         with conn.cursor() as cur:
             q = quote_identifier(params["conn_type"], table)
-            cur.execute(f"SELECT COUNT(*) as total FROM {q}")
+            valid_cols = None
+
+            where_clause = ""
+            where_params = []
+            if filter_col:
+                valid_cols = get_table_columns(cur, params["conn_type"], table)
+                if filter_col not in valid_cols:
+                    raise HTTPException(status_code=400, detail="无效的筛选字段")
+                q_fcol = quote_identifier(params["conn_type"], filter_col)
+                op = (filter_op or "contains").lower()
+                if op == "isnull":
+                    where_clause = f" WHERE {q_fcol} IS NULL"
+                elif op == "notnull":
+                    where_clause = f" WHERE {q_fcol} IS NOT NULL"
+                elif filter_val is not None and filter_val != "":
+                    if op == "eq":
+                        where_clause = f" WHERE {q_fcol} = %s"
+                        where_params.append(filter_val)
+                    elif op == "neq":
+                        where_clause = f" WHERE {q_fcol} != %s"
+                        where_params.append(filter_val)
+                    elif op == "gt":
+                        where_clause = f" WHERE {q_fcol} > %s"
+                        where_params.append(filter_val)
+                    elif op == "lt":
+                        where_clause = f" WHERE {q_fcol} < %s"
+                        where_params.append(filter_val)
+                    else:
+                        if params["conn_type"] == "mysql":
+                            where_clause = f" WHERE CAST({q_fcol} AS CHAR) LIKE %s"
+                        else:
+                            where_clause = f" WHERE CAST({q_fcol} AS TEXT) ILIKE %s"
+                        where_params.append(f"%{filter_val}%")
+
+            cur.execute(f"SELECT COUNT(*) as total FROM {q}{where_clause}", tuple(where_params))
             total = cur.fetchone()["total"]
+
+            order_clause = ""
+            active_sort_col = None
+            active_sort_dir = None
+            if sort_col:
+                if valid_cols is None:
+                    valid_cols = get_table_columns(cur, params["conn_type"], table)
+                if sort_col not in valid_cols:
+                    raise HTTPException(status_code=400, detail="无效的排序字段")
+                active_sort_col = sort_col
+                active_sort_dir = "desc" if (sort_dir or "").lower() == "desc" else "asc"
+                q_sort = quote_identifier(params["conn_type"], active_sort_col)
+                order_clause = f" ORDER BY {q_sort} {active_sort_dir.upper()}"
+
             offset = (page - 1) * size
-            cur.execute(f"SELECT * FROM {q} LIMIT %s OFFSET %s", (size, offset))
+            cur.execute(
+                f"SELECT * FROM {q}{where_clause}{order_clause} LIMIT %s OFFSET %s",
+                tuple(where_params) + (size, offset),
+            )
             rows = cur.fetchall()
             columns = [desc[0] for desc in cur.description] if cur.description else []
             pk = get_pk_column(cur, params["conn_type"], table)
             return {
                 "columns": columns,
-                "data": [dict(r) for r in rows],
+                "data": [normalize_row(r) for r in rows],
                 "total": total,
                 "page": page,
                 "size": size,
                 "pages": (total + size - 1) // size,
                 "pk": pk,
+                "sort_col": active_sort_col,
+                "sort_dir": active_sort_dir,
             }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         conn.close()
 
@@ -325,7 +414,7 @@ async def execute_query(request: Request, db: str = Form(...), sql: str = Form(.
                 columns = [desc[0] for desc in cur.description]
                 return {
                     "columns": columns,
-                    "data": [dict(r) for r in rows],
+                    "data": [normalize_row(r) for r in rows],
                     "rowcount": len(rows),
                 }
             else:
