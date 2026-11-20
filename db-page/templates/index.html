@@ -6,19 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DBPage</title>
     <link rel="icon" type="image/png" href="/static/database.png">
-    <link rel="stylesheet" href="/static/css/style.css?v=6">
+    <link rel="stylesheet" href="/static/css/style.css?v=8">
 </head>
 
 <body>
     <header>
-        <div class="brand">DBPage</div>
+        <div class="brand" role="button" tabindex="0">
+            <span class="brand-mark" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <ellipse cx="12" cy="5" rx="9" ry="3" />
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                    <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
+                </svg>
+            </span>
+            <span class="brand-name">DBPage</span>
+        </div>
     </header>
     <main>
         <!-- 连接卡片页面 -->
         <div id="connections-view">
             <div class="view-header">
                 <h2>数据库连接</h2>
-                <button id="btn-add-conn" class="btn-primary" style="width:auto; padding: 9px 20px;">+ 新建连接</button>
+                <button id="btn-add-conn" class="btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                    <span>新建连接</span>
+                </button>
             </div>
             <div id="conn-cards" class="cards-grid"></div>
         </div>
@@ -26,9 +38,15 @@
         <!-- 数据浏览页面 -->
         <div id="data-view" class="hidden">
             <div class="view-header">
-                <button id="btn-back" class="btn-secondary">← 返回连接列表</button>
+                <button id="btn-back" class="btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    <span>连接列表</span>
+                </button>
                 <div class="toolbar-inline">
-                    <button id="btn-new-query" class="btn-secondary">+ 新建查询</button>
+                    <button id="btn-new-query" class="btn-secondary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                        <span>SQL 查询</span>
+                    </button>
                     <select id="db-select">
                         <option value="">选择数据库</option>
                     </select>
@@ -40,20 +58,20 @@
                         <button type="button" id="col-picker-trigger" class="custom-select-trigger">
                             <span class="custom-select-value-wrap">
                                 <span class="custom-select-icon">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>
                                 </span>
                                 <span id="col-picker-label" class="custom-select-label">显示字段</span>
                             </span>
                             <span class="custom-select-chevron">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                             </span>
                         </button>
                         <div class="custom-select-menu col-picker-menu">
                             <div class="custom-select-search-wrap">
                                 <span class="custom-select-search-icon">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                                 </span>
-                                <input type="text" id="col-picker-search" class="custom-select-search" placeholder="搜索字段...">
+                                <input type="text" id="col-picker-search" class="custom-select-search" placeholder="搜索字段">
                             </div>
                             <div class="col-picker-actions">
                                 <button type="button" id="col-picker-all" class="col-picker-link">全选</button>
@@ -63,11 +81,11 @@
                         </div>
                     </div>
                     <button type="button" id="btn-equal-width" class="btn-secondary hidden" title="按当前显示字段数量平分表格宽度">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 4v16"/><path d="m9 10-3 2 3 2"/><path d="m15 10 3 2-3 2"/></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 4v16"/></svg>
                         <span>平分宽度</span>
                     </button>
                     <button type="button" id="btn-toggle-filter" class="btn-secondary hidden">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                         <span>筛选</span>
                         <span id="filter-badge" class="filter-badge hidden"></span>
                     </button>
@@ -75,7 +93,7 @@
             </div>
             <!-- 按字段条件筛选栏 -->
             <div id="filter-bar" class="filter-bar hidden">
-                <span class="filter-bar-label">字段筛选</span>
+                <span class="filter-bar-label">筛选条件</span>
                 <select id="filter-col-select">
                     <option value="">选择字段</option>
                 </select>
@@ -88,9 +106,9 @@
                     <option value="isnull">为空 (IS NULL)</option>
                     <option value="notnull">不为空 (IS NOT NULL)</option>
                 </select>
-                <input type="text" id="filter-val-input" class="filter-val-input" placeholder="输入筛选内容，回车查询...">
-                <button type="button" id="btn-apply-filter" class="btn-primary filter-btn">查询</button>
-                <button type="button" id="btn-clear-filter" class="btn-secondary filter-btn">重置</button>
+                <input type="text" id="filter-val-input" class="filter-val-input" placeholder="输入筛选值，回车查询">
+                <button type="button" id="btn-apply-filter" class="btn-primary">查询</button>
+                <button type="button" id="btn-clear-filter" class="btn-secondary">重置</button>
             </div>
             <div class="table-wrap">
                 <table id="data-table">
@@ -101,32 +119,29 @@
             <div class="pagination hidden" id="pagination">
                 <div class="page-info">
                     第 <span id="page-num">1</span> / <span id="page-total">1</span> 页
+                    <span class="page-info-sep">·</span>
                     共 <span id="row-total">0</span> 条
                 </div>
                 <div class="page-pills" id="page-pills">
                     <button type="button" id="btn-first" aria-label="首页">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m11 17-5-5 5-5" />
                             <path d="m18 17-5-5 5-5" />
                         </svg>
                     </button>
                     <button type="button" id="btn-prev" aria-label="上一页">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m15 18-6-6 6-6" />
                         </svg>
                     </button>
                     <div class="page-numbers" id="page-numbers"></div>
                     <button type="button" id="btn-next" aria-label="下一页">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m9 18 6-6-6-6" />
                         </svg>
                     </button>
                     <button type="button" id="btn-last" aria-label="尾页">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m13 17 5-5-5-5" />
                             <path d="m6 17 5-5-5-5" />
                         </svg>
@@ -149,7 +164,10 @@
         <!-- SQL 查询页面 -->
         <div id="sql-view" class="hidden">
             <div class="view-header">
-                <button id="btn-back-data" class="btn-secondary">← 返回数据浏览</button>
+                <button id="btn-back-data" class="btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    <span>数据浏览</span>
+                </button>
                 <div class="toolbar-inline">
                     <select id="sql-db-select">
                         <option value="">选择数据库</option>
@@ -158,10 +176,13 @@
             </div>
             <div class="sql-panel">
                 <div class="sql-toolbar">
-                    <label>SQL Execute</label>
-                    <button id="btn-run-sql" class="btn-primary" style="width:auto; padding: 8px 18px;">▶ 执行</button>
+                    <label for="sql-input">SQL 编辑器</label>
+                    <button id="btn-run-sql" class="btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                        <span>执行</span>
+                    </button>
                 </div>
-                <textarea id="sql-input" placeholder="SELECT * FROM ..." spellcheck="false"></textarea>
+                <textarea id="sql-input" placeholder="SELECT * FROM table_name LIMIT 10" spellcheck="false"></textarea>
                 <div id="sql-error" class="sql-error hidden"></div>
             </div>
             <div class="table-wrap">
@@ -174,13 +195,13 @@
 
         <!-- 自定义提示框 -->
         <div id="custom-confirm" class="modal hidden">
-            <div class="modal-content" style="width:360px;">
+            <div class="modal-content modal-content-sm">
                 <h3 id="confirm-title">提示</h3>
-                <p id="confirm-message" style="margin:16px 0; font-size:14px; color:var(--text);"></p>
+                <p id="confirm-message" class="confirm-message"></p>
                 <div class="modal-actions">
                     <button id="btn-confirm-yes" class="btn-primary">保存</button>
                     <button id="btn-confirm-no" class="btn-secondary">取消</button>
-                    <button id="btn-confirm-ok" class="btn-primary hidden" style="flex:1;">确定</button>
+                    <button id="btn-confirm-ok" class="btn-primary hidden">确定</button>
                 </div>
             </div>
         </div>
@@ -191,30 +212,30 @@
                 <h3 id="modal-title">新建连接</h3>
                 <input type="hidden" id="modal-conn-id">
                 <div class="field">
-                    <label>连接名称</label>
-                    <input type="text" id="modal-name" placeholder="例如：生产环境">
+                    <label for="modal-name">连接名称</label>
+                    <input type="text" id="modal-name" placeholder="生产环境">
                 </div>
                 <div class="field">
-                    <label>数据库类型</label>
+                    <label for="modal-type">数据库类型</label>
                     <select id="modal-type">
                         <option value="postgresql">PostgreSQL</option>
                         <option value="mysql">MySQL</option>
                     </select>
                 </div>
                 <div class="field">
-                    <label>主机</label>
+                    <label for="modal-host">主机</label>
                     <input type="text" id="modal-host" placeholder="localhost">
                 </div>
                 <div class="field">
-                    <label>端口</label>
+                    <label for="modal-port">端口</label>
                     <input type="number" id="modal-port" placeholder="5432">
                 </div>
                 <div class="field">
-                    <label>用户名</label>
+                    <label for="modal-user">用户名</label>
                     <input type="text" id="modal-user" placeholder="postgres">
                 </div>
                 <div class="field">
-                    <label>密码</label>
+                    <label for="modal-password">密码</label>
                     <input type="password" id="modal-password" placeholder="密码">
                 </div>
                 <div class="modal-actions">
@@ -225,7 +246,7 @@
         </div>
     </main>
     <div id="toast" class="toast hidden">已复制</div>
-    <script src="/static/js/app.js?v=16"></script>
+    <script src="/static/js/app.js?v=17"></script>
 </body>
 
 </html>

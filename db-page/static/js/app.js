@@ -23,11 +23,13 @@ let currentConnType = 'postgresql';
 let initData = {};
 
 const SELECT_ICONS = {
-    db: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>',
-    table: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>',
-    chevron: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
-    search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
-    check: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+    db: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>',
+    table: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>',
+    chevron: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+    search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+    check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    edit: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>',
+    trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>'
 };
 
 const customSelectInstances = [];
@@ -311,18 +313,21 @@ async function loadConnections() {
 function renderCards() {
     const grid = document.getElementById('conn-cards');
     if (!connections.length) {
-        grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无连接，点击右上角「新建连接」</div>';
+        grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无连接，点击右上角新建</div>';
         return;
     }
     grid.innerHTML = connections.map(c => {
-        const icon = c.type === 'mysql' ? '🐬' : '🐘';
+        const typeLabel = c.type === 'mysql' ? 'MySQL' : 'PostgreSQL';
         return `
         <div class="conn-card" data-id="${escapeHtml(c.id)}">
             <div class="card-header">
-                <div class="card-icon">${icon}</div>
+                <div class="card-type-group">
+                    <div class="card-icon">${SELECT_ICONS.db}</div>
+                    <span class="card-type-tag">${typeLabel}</span>
+                </div>
                 <div class="card-actions">
-                    <button class="btn-icon edit" title="编辑">✏️</button>
-                    <button class="btn-icon delete" title="删除">🗑️</button>
+                    <button type="button" class="btn-icon edit" title="编辑" aria-label="编辑连接">${SELECT_ICONS.edit}</button>
+                    <button type="button" class="btn-icon delete" title="删除" aria-label="删除连接">${SELECT_ICONS.trash}</button>
                 </div>
             </div>
             <div class="card-name">${escapeHtml(c.name)}</div>
@@ -985,7 +990,14 @@ function showToast(message) {
 }
 
 /* ===== 事件绑定 ===== */
-document.querySelector('.brand').addEventListener('click', showConnectionsView);
+const brandEl = document.querySelector('.brand');
+brandEl.addEventListener('click', showConnectionsView);
+brandEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        showConnectionsView();
+    }
+});
 document.getElementById('btn-add-conn').addEventListener('click', openAddModal);
 document.getElementById('btn-cancel-conn').addEventListener('click', closeModal);
 document.getElementById('btn-save-conn').addEventListener('click', saveModal);
@@ -1141,7 +1153,7 @@ document.getElementById('btn-new-query').addEventListener('click', () => {
         const q = currentConnType === 'mysql' ? `\`${state.table}\`` : `"${state.table}"`;
         document.getElementById('sql-input').value = `SELECT * FROM ${q} LIMIT 10`;
     } else {
-        document.getElementById('sql-input').value = 'SELECT * FROM ... LIMIT 10';
+        document.getElementById('sql-input').value = 'SELECT * FROM table_name LIMIT 10';
     }
 });
 
@@ -1190,17 +1202,17 @@ function initCustomSelects() {
     createCustomSelect(document.getElementById('db-select'), {
         icon: 'db',
         searchable: true,
-        searchPlaceholder: '搜索数据库...'
+        searchPlaceholder: '搜索数据库'
     });
     createCustomSelect(document.getElementById('table-select'), {
         icon: 'table',
         searchable: true,
-        searchPlaceholder: '搜索表...'
+        searchPlaceholder: '搜索表'
     });
     createCustomSelect(document.getElementById('sql-db-select'), {
         icon: 'db',
         searchable: true,
-        searchPlaceholder: '搜索数据库...'
+        searchPlaceholder: '搜索数据库'
     });
     createCustomSelect(document.getElementById('page-size'), {
         upward: true,
@@ -1209,7 +1221,7 @@ function initCustomSelects() {
     createCustomSelect(document.getElementById('modal-type'));
     createCustomSelect(document.getElementById('filter-col-select'), {
         searchable: true,
-        searchPlaceholder: '搜索字段...'
+        searchPlaceholder: '搜索字段'
     });
     createCustomSelect(document.getElementById('filter-op-select'));
 }
