@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DBPage</title>
     <link rel="icon" type="image/png" href="/static/database.png">
-    <link rel="stylesheet" href="/static/css/style.css?v=13">
+    <link rel="stylesheet" href="/static/css/style.css?v=14">
 </head>
 
 <body>
@@ -39,6 +39,25 @@
                     <span id="nav-sql-label">SQL 查询</span>
                 </button>
             </nav>
+
+            <!-- 顶栏蓝框位：当前已连接胶囊 + 备注提示 -->
+            <span id="header-conn-sep" class="header-nav-sep hidden" aria-hidden="true"></span>
+            <div id="active-conn-bar" class="active-conn-bar hidden">
+                <div id="active-conn-switcher" class="custom-select conn-pill-switcher">
+                    <button type="button" id="active-conn-trigger" class="conn-pill-btn">
+                        <span class="conn-live-dot" aria-hidden="true"></span>
+                        <span class="conn-pill-status">已连接</span>
+                        <span class="conn-pill-sep">·</span>
+                        <span id="active-conn-name" class="conn-pill-name">Local</span>
+                        <span id="active-conn-type" class="conn-pill-type">PG</span>
+                        <svg class="conn-pill-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="custom-select-menu conn-pill-menu">
+                        <div id="active-conn-list" class="custom-select-options"></div>
+                    </div>
+                </div>
+                <div id="active-conn-remark" class="conn-remark-chip hidden"></div>
+            </div>
         </div>
     </header>
 
@@ -65,27 +84,6 @@
 
         <!-- P2: 数据浏览页面 -->
         <div id="data-view" class="hidden">
-            <div class="view-context-bar">
-                <div class="view-context-left">
-                    <h2 class="view-context-title">数据浏览</h2>
-                    <!-- 显眼的当前连接胶囊 + 快速切换 -->
-                    <div id="p2-conn-switcher" class="custom-select conn-pill-switcher">
-                        <button type="button" id="p2-conn-trigger" class="conn-pill-btn">
-                            <span class="conn-live-dot" aria-hidden="true"></span>
-                            <span class="conn-pill-status">已连接</span>
-                            <span class="conn-pill-sep">·</span>
-                            <span id="p2-conn-name" class="conn-pill-name">Local</span>
-                            <span id="p2-conn-type" class="conn-pill-type">PG</span>
-                            <svg class="conn-pill-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                        </button>
-                        <div class="custom-select-menu conn-pill-menu">
-                            <div id="p2-conn-list" class="custom-select-options"></div>
-                        </div>
-                    </div>
-                    <div id="p2-conn-remark" class="conn-remark-chip hidden"></div>
-                </div>
-            </div>
-
             <div class="data-toolbar-row">
                 <div class="toolbar-inline">
                     <!-- 分组 1：数据源定位 -->
@@ -264,34 +262,13 @@
 
         <!-- P3: SQL / 命令查询页面 -->
         <div id="sql-view" class="hidden">
-            <div class="view-context-bar">
-                <div class="view-context-left">
-                    <h2 id="sql-view-title" class="view-context-title">SQL 查询</h2>
-                    <div id="p3-conn-switcher" class="custom-select conn-pill-switcher">
-                        <button type="button" id="p3-conn-trigger" class="conn-pill-btn">
-                            <span class="conn-live-dot" aria-hidden="true"></span>
-                            <span class="conn-pill-status">已连接</span>
-                            <span class="conn-pill-sep">·</span>
-                            <span id="p3-conn-name" class="conn-pill-name">Local</span>
-                            <span id="p3-conn-type" class="conn-pill-type">PG</span>
-                            <svg class="conn-pill-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                        </button>
-                        <div class="custom-select-menu conn-pill-menu">
-                            <div id="p3-conn-list" class="custom-select-options"></div>
-                        </div>
-                    </div>
-                    <div id="p3-conn-remark" class="conn-remark-chip hidden"></div>
-                </div>
-                <div class="toolbar-inline">
-                    <select id="sql-db-select">
-                        <option value="">选择数据库</option>
-                    </select>
-                </div>
-            </div>
             <div class="sql-panel">
                 <div class="sql-toolbar">
                     <div class="sql-toolbar-left">
                         <label id="sql-editor-label" for="sql-input">SQL 编辑器</label>
+                        <select id="sql-db-select">
+                            <option value="">选择数据库</option>
+                        </select>
                         <span class="kbd-hint">⌘/Ctrl + Enter 运行</span>
                     </div>
                     <div class="sql-toolbar-right">
@@ -419,7 +396,7 @@
         </div>
     </main>
     <div id="toast" class="toast hidden">已复制</div>
-    <script src="/static/js/app.js?v=23"></script>
+    <script src="/static/js/app.js?v=24"></script>
 </body>
 
 </html>

@@ -76,7 +76,7 @@ function closeAllCustomSelects(except = null) {
     customSelectInstances.forEach(inst => {
         if (inst !== except) inst.close();
     });
-    ['col-picker', 'export-picker', 'history-picker', 'p2-conn-switcher', 'p3-conn-switcher', 'view-opts-picker'].forEach(id => {
+    ['col-picker', 'export-picker', 'history-picker', 'active-conn-switcher', 'view-opts-picker'].forEach(id => {
         const el = document.getElementById(id);
         if (el && except !== el) el.classList.remove('open');
     });
@@ -413,7 +413,12 @@ function updateTopNav() {
 
 function updateActiveConnBadges() {
     updateTopNav();
+    const connSep = document.getElementById('header-conn-sep');
+    const bar = document.getElementById('active-conn-bar');
     const conn = connections.find(c => c.id === currentConnId);
+    const showBar = Boolean(conn && currentView !== 'connections');
+    if (connSep) connSep.classList.toggle('hidden', !showBar);
+    if (bar) bar.classList.toggle('hidden', !showBar);
     if (!conn) return;
 
     const typeCls = connTypeClass(conn.type);
@@ -421,50 +426,48 @@ function updateActiveConnBadges() {
     const remarkText = (conn.remark || '').trim();
     const fallbackAddr = `${conn.host}:${conn.port}`;
 
-    ['p2', 'p3'].forEach(prefix => {
-        const switcher = document.getElementById(`${prefix}-conn-switcher`);
-        const nameEl = document.getElementById(`${prefix}-conn-name`);
-        const typeEl = document.getElementById(`${prefix}-conn-type`);
-        const remarkEl = document.getElementById(`${prefix}-conn-remark`);
-        const listEl = document.getElementById(`${prefix}-conn-list`);
-        if (!switcher || !nameEl || !typeEl || !listEl) return;
+    const switcher = document.getElementById('active-conn-switcher');
+    const nameEl = document.getElementById('active-conn-name');
+    const typeEl = document.getElementById('active-conn-type');
+    const remarkEl = document.getElementById('active-conn-remark');
+    const listEl = document.getElementById('active-conn-list');
+    if (!switcher || !nameEl || !typeEl || !listEl) return;
 
-        switcher.className = `custom-select conn-pill-switcher ${typeCls}`;
-        nameEl.textContent = conn.name;
-        typeEl.textContent = typeShort;
+    switcher.className = `custom-select conn-pill-switcher ${typeCls}`;
+    nameEl.textContent = conn.name;
+    typeEl.textContent = typeShort;
 
-        if (remarkEl) {
-            if (remarkText) {
-                remarkEl.textContent = remarkText;
-                remarkEl.title = `备注: ${remarkText} (${fallbackAddr})`;
-                remarkEl.classList.add('is-remark');
-                remarkEl.classList.remove('hidden');
-            } else {
-                remarkEl.textContent = fallbackAddr;
-                remarkEl.title = fallbackAddr;
-                remarkEl.classList.remove('is-remark');
-                remarkEl.classList.remove('hidden');
-            }
+    if (remarkEl) {
+        if (remarkText) {
+            remarkEl.textContent = remarkText;
+            remarkEl.title = `备注: ${remarkText} (${fallbackAddr})`;
+            remarkEl.classList.add('is-remark');
+            remarkEl.classList.remove('hidden');
+        } else {
+            remarkEl.textContent = fallbackAddr;
+            remarkEl.title = fallbackAddr;
+            remarkEl.classList.remove('is-remark');
+            remarkEl.classList.remove('hidden');
         }
+    }
 
-        listEl.innerHTML = '';
-        connections.forEach(c => {
-            const item = document.createElement('div');
-            item.className = 'custom-select-option' + (c.id === currentConnId ? ' selected' : '');
-            const rHint = (c.remark || '').trim() ? ` · ${escapeHtml(c.remark.trim())}` : '';
-            item.innerHTML = `
-                <span class="custom-select-option-text">${escapeHtml(c.name)} <span class="card-type-tag ${connTypeClass(c.type)}" style="margin-left:4px;font-size:10.5px;padding:1px 6px;">${connTypeShort(c.type)}</span><span class="row-field-type">${rHint}</span></span>
-                <span class="custom-select-check">${SELECT_ICONS.check}</span>
-            `;
-            item.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                switcher.classList.remove('open');
-                if (c.id !== currentConnId) {
-                    await useConnection(c.id, currentView === 'sql' ? 'sql' : 'data');
-                }
-            });
-            listEl.appendChild(item);
+    listEl.innerHTML = '';
+    connections.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'custom-select-option' + (c.id === currentConnId ? ' selected' : '');
+        const rHint = (c.remark || '').trim() ? ` · ${escapeHtml(c.remark.trim())}` : '';
+        item.innerHTML = `
+            <span class="custom-select-option-text">${escapeHtml(c.name)} <span class="card-type-tag ${connTypeClass(c.type)}" style="margin-left:4px;font-size:10.5px;padding:1px 6px;">${connTypeShort(c.type)}</span><span class="row-field-type">${rHint}</span></span>
+            <span class="custom-select-check">${SELECT_ICONS.check}</span>
+        `;
+        item.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            switcher.classList.remove('open');
+            if (c.id !== currentConnId) {
+                await useConnection(c.id, currentView === 'sql' ? 'sql' : 'data');
+            }
         });
+        listEl.appendChild(item);
     });
 }
 
@@ -709,7 +712,7 @@ function showConnectionsView() {
     document.getElementById('connections-view').classList.remove('hidden');
     document.getElementById('data-view').classList.add('hidden');
     document.getElementById('sql-view').classList.add('hidden');
-    updateTopNav();
+    updateActiveConnBadges();
     updateUrlHash();
 }
 
@@ -1939,23 +1942,21 @@ brandEl.addEventListener('keydown', (e) => {
     }
 });
 
-/* ===== 顶栏三页导航 & P2/P3 胶囊切换绑定 ===== */
+/* ===== 顶栏三页导航 & 顶栏连接胶囊切换绑定 ===== */
 document.getElementById('nav-connections').addEventListener('click', showConnectionsView);
 document.getElementById('nav-data').addEventListener('click', showDataView);
 document.getElementById('nav-sql').addEventListener('click', showSqlView);
 
-['p2', 'p3'].forEach(prefix => {
-    const trigger = document.getElementById(`${prefix}-conn-trigger`);
-    const switcher = document.getElementById(`${prefix}-conn-switcher`);
-    if (trigger && switcher) {
-        trigger.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isOpen = switcher.classList.contains('open');
-            closeAllCustomSelects(switcher);
-            switcher.classList.toggle('open', !isOpen);
-        });
-    }
-});
+const activeConnTrigger = document.getElementById('active-conn-trigger');
+const activeConnSwitcher = document.getElementById('active-conn-switcher');
+if (activeConnTrigger && activeConnSwitcher) {
+    activeConnTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = activeConnSwitcher.classList.contains('open');
+        closeAllCustomSelects(activeConnSwitcher);
+        activeConnSwitcher.classList.toggle('open', !isOpen);
+    });
+}
 
 document.querySelectorAll('#conn-filter-tabs .conn-tab').forEach(btn => {
     btn.addEventListener('click', () => {

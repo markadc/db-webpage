@@ -1969,6 +1969,21 @@ tbody tr:hover .row-del-btn {
   border-color: rgba(37, 99, 235, 0.2);
 }
 
+.active-conn-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sql-toolbar-left .custom-select {
+  min-width: 172px;
+}
+
+.sql-toolbar-left .custom-select-trigger {
+  height: 32px;
+  font-size: 13px;
+}
+
 /* P2 / P3 Prominent Context Bar & Connection Pill */
 .view-context-bar {
   display: flex;
