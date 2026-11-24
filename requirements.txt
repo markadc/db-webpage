@@ -13,6 +13,7 @@ pydantic==2.13.4
 pydantic-core==2.46.4
 pymysql==1.2.0
 python-multipart==0.0.29
+redis==8.1.0
 starlette==1.1.0
 typing-extensions==4.15.0
 typing-inspection==0.4.2

@@ -1,19 +1,22 @@
 {
   "name": "db-webpage",
-  "version": "1.0.9",
-  "description": "A lightweight database data visualization tool for PostgreSQL and MySQL",
+  "version": "1.1.0",
+  "description": "A lightweight database data visualization tool for PostgreSQL, MySQL, and Redis",
   "main": "src/index.js",
   "bin": {
     "dbw": "src/index.js"
   },
   "scripts": {
     "start": "node src/index.js",
+    "sync": "cp ../templates/index.html templates/index.html && cp ../static/css/style.css static/css/style.css && cp ../static/js/app.js static/js/app.js",
+    "prepack": "npm run sync || true",
     "postinstall": "node scripts/postinstall.js"
   },
   "keywords": [
     "database",
     "postgresql",
     "mysql",
+    "redis",
     "visualization",
     "sql",
     "db"
@@ -23,6 +26,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "express-session": "^1.18.0",
+    "ioredis": "^6.1.0",
     "mysql2": "^3.10.0",
     "open": "^10.1.0",
     "pg": "^8.12.0"

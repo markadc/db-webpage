@@ -1,6 +1,6 @@
 # 🗃️ DBWebpage
 
-> A lightweight database data visualization tool for PostgreSQL 🐘 and MySQL 🐬.
+> A lightweight database data visualization tool for PostgreSQL, MySQL, and Redis.
 
 <p align="center">
   <img src="https://unpkg.com/db-webpage@latest/dbpage-view-data.png" width="700" alt="DBWebpage Preview">
@@ -38,11 +38,11 @@ PORT=8080 dbw
 
 ## Features
 
-- 🔌 **Connection Management** — Create, edit, and delete database connections
-- 🗄️ **Multi-Database Support** — PostgreSQL and MySQL
-- 📊 **Data Browsing** — Browse table data with pagination
-- 📝 **SQL Execution** — Execute arbitrary SQL queries
-- 💾 **State Persistence** — Saves last used database, table, and SQL per connection
+- 🔌 **Connection Management** — Create, edit, test, and delete database connections with quick header switching
+- 🗄️ **Multi-Database Support** — PostgreSQL, MySQL, and Redis
+- 📊 **Data Browsing & CRUD** — Pagination, sorting, multi-op filtering, inline & JSON modal editing, add/delete rows, and CSV/JSON export
+- 📝 **SQL & Redis Terminal** — Execute arbitrary SQL queries or Redis commands with history and `Cmd/Ctrl + Enter` shortcut
+- 💾 **State Persistence** — Saves last used database, table, and query history per connection
 
 ## Tech Stack
 
@@ -52,6 +52,7 @@ PORT=8080 dbw
 | Frontend    | HTML + CSS + JavaScript        |
 | PostgreSQL  | `pg`                           |
 | MySQL       | `mysql2`                       |
+| Redis       | `ioredis`                      |
 
 ## Configuration
 

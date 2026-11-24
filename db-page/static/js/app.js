@@ -11,25 +11,36 @@ let state = {
     equalWidth: false,
     hiddenCols: new Set(),
     allColumns: [],
+    columnTypes: {},
     lastTableData: null,
     filterCol: '',
     filterOp: 'contains',
     filterVal: ''
 };
 let sqlColWidths = {};
+let lastSqlResultData = null;
 let connections = [];
 let currentConnId = null;
 let currentConnType = 'postgresql';
+let currentView = 'connections';
 let initData = {};
+let cellModalCtx = null;
+let connFilterType = 'all';
 
 const SELECT_ICONS = {
     db: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>',
+    pg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>',
+    mysql: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 9v12"/></svg>',
+    redis: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/></svg>',
+    pk: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>',
+    empty: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',
     table: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>',
     chevron: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
     search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
     check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
     edit: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>',
-    trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>'
+    trash: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>',
+    expand: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>'
 };
 
 const customSelectInstances = [];
@@ -38,10 +49,10 @@ function closeAllCustomSelects(except = null) {
     customSelectInstances.forEach(inst => {
         if (inst !== except) inst.close();
     });
-    const colPicker = document.getElementById('col-picker');
-    if (colPicker && except !== colPicker) {
-        colPicker.classList.remove('open');
-    }
+    ['col-picker', 'export-picker', 'history-picker', 'header-conn-switcher'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && except !== el) el.classList.remove('open');
+    });
 }
 
 document.addEventListener('click', (e) => {
@@ -56,7 +67,7 @@ function createCustomSelect(selectEl, opts = {}) {
     const {
         icon = null,
         searchable = false,
-        searchPlaceholder = '搜索...',
+        searchPlaceholder = '搜索',
         upward = false,
         compact = false
     } = opts;
@@ -299,30 +310,150 @@ function syncCustomSelect(selectEl) {
 
 async function fetchJSON(url, opts) {
     const r = await fetch(url, opts);
-    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || '请求失败'); }
+    if (!r.ok) {
+        let detail = '请求失败';
+        try {
+            const e = await r.json();
+            detail = e.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+    }
     return r.json();
 }
 
+function connTypeLabel(t) {
+    if (t === 'mysql') return 'MySQL';
+    if (t === 'redis') return 'Redis';
+    return 'PostgreSQL';
+}
+
+function connTypeShort(t) {
+    if (t === 'mysql') return 'MySQL';
+    if (t === 'redis') return 'Redis';
+    return 'PG';
+}
+
+function connTypeClass(t) {
+    if (t === 'mysql') return 'type-mysql';
+    if (t === 'redis') return 'type-redis';
+    return 'type-postgresql';
+}
+
+function connTypeIcon(t) {
+    if (t === 'mysql') return SELECT_ICONS.mysql;
+    if (t === 'redis') return SELECT_ICONS.redis;
+    return SELECT_ICONS.pg;
+}
+
+function emptyHtml(text) {
+    return `<div class="empty-box"><span class="empty-icon">${SELECT_ICONS.empty}</span><span>${escapeHtml(text)}</span></div>`;
+}
+
+/* ===== URL Hash 状态同步 ===== */
+function updateUrlHash() {
+    if (!currentConnId || currentView === 'connections') {
+        if (location.hash) {
+            history.replaceState(null, '', location.pathname + location.search);
+        }
+        return;
+    }
+    const params = new URLSearchParams();
+    params.set('conn', currentConnId);
+    params.set('view', currentView);
+    history.replaceState(null, '', '#' + params.toString());
+}
+
+function parseUrlHash() {
+    const raw = location.hash ? location.hash.slice(1) : '';
+    const params = new URLSearchParams(raw);
+    return {
+        conn: params.get('conn') || '',
+        view: params.get('view') || 'data'
+    };
+}
+
+/* ===== 顶栏当前连接切换器 ===== */
+function updateHeaderConnSwitcher() {
+    const switcher = document.getElementById('header-conn-switcher');
+    if (!switcher) return;
+    if (!currentConnId || currentView === 'connections') {
+        switcher.classList.add('hidden');
+        return;
+    }
+    const conn = connections.find(c => c.id === currentConnId);
+    if (!conn) {
+        switcher.classList.add('hidden');
+        return;
+    }
+    document.getElementById('header-conn-name').textContent = conn.name;
+    const typeEl = document.getElementById('header-conn-type');
+    typeEl.textContent = connTypeShort(conn.type);
+    typeEl.className = `card-type-tag ${connTypeClass(conn.type)}`;
+    switcher.classList.remove('hidden');
+
+    const listEl = document.getElementById('header-conn-list');
+    listEl.innerHTML = '';
+    connections.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'custom-select-option' + (c.id === currentConnId ? ' selected' : '');
+        item.innerHTML = `
+            <span class="custom-select-option-text">${escapeHtml(c.name)} <span class="card-type-tag ${connTypeClass(c.type)}" style="margin-left:4px;font-size:10.5px;padding:1px 6px;">${connTypeShort(c.type)}</span></span>
+            <span class="custom-select-check">${SELECT_ICONS.check}</span>
+        `;
+        item.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            switcher.classList.remove('open');
+            if (c.id !== currentConnId) {
+                await useConnection(c.id, 'data');
+            }
+        });
+        listEl.appendChild(item);
+    });
+}
+
 /* ===== 连接卡片 ===== */
+function renderConnFilterTabs() {
+    const counts = { all: connections.length, postgresql: 0, mysql: 0, redis: 0 };
+    connections.forEach(c => {
+        const t = c.type || 'postgresql';
+        if (counts[t] !== undefined) counts[t]++;
+    });
+    const labels = { all: '全部', postgresql: 'PostgreSQL', mysql: 'MySQL', redis: 'Redis' };
+    document.querySelectorAll('#conn-filter-tabs .conn-tab').forEach(btn => {
+        const t = btn.dataset.type;
+        btn.classList.toggle('active', t === connFilterType);
+        const cnt = counts[t] || 0;
+        btn.innerHTML = `${labels[t]} <span class="conn-tab-count">${cnt}</span>`;
+    });
+}
+
 async function loadConnections() {
     const data = await fetchJSON('/api/connections');
     connections = data.connections;
+    renderConnFilterTabs();
     renderCards();
+    updateHeaderConnSwitcher();
 }
 
 function renderCards() {
     const grid = document.getElementById('conn-cards');
-    if (!connections.length) {
-        grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无连接，点击右上角新建</div>';
+    const filtered = connFilterType === 'all'
+        ? connections
+        : connections.filter(c => (c.type || 'postgresql') === connFilterType);
+    if (!filtered.length) {
+        const msg = connections.length ? '当前类型下暂无连接' : '暂无连接，点击右上角新建连接';
+        grid.innerHTML = `<div class="empty" style="grid-column:1/-1;">${emptyHtml(msg)}</div>`;
         return;
     }
-    grid.innerHTML = connections.map(c => {
-        const typeLabel = c.type === 'mysql' ? 'MySQL' : 'PostgreSQL';
+    grid.innerHTML = filtered.map(c => {
+        const typeLabel = connTypeLabel(c.type);
+        const typeCls = connTypeClass(c.type);
+        const metaAddr = c.user ? `${escapeHtml(c.user)}@${escapeHtml(c.host)}:${c.port}` : `${escapeHtml(c.host)}:${c.port}`;
         return `
-        <div class="conn-card" data-id="${escapeHtml(c.id)}">
+        <div class="conn-card ${typeCls}" data-id="${escapeHtml(c.id)}">
             <div class="card-header">
                 <div class="card-type-group">
-                    <div class="card-icon">${SELECT_ICONS.db}</div>
+                    <div class="card-icon">${connTypeIcon(c.type)}</div>
                     <span class="card-type-tag">${typeLabel}</span>
                 </div>
                 <div class="card-actions">
@@ -331,7 +462,7 @@ function renderCards() {
                 </div>
             </div>
             <div class="card-name">${escapeHtml(c.name)}</div>
-            <div class="card-meta">${escapeHtml(c.user)}@${escapeHtml(c.host)}:${c.port}</div>
+            <div class="card-meta">${metaAddr}</div>
         </div>
     `}).join('');
 
@@ -339,14 +470,14 @@ function renderCards() {
         const id = card.dataset.id;
         card.addEventListener('click', async (e) => {
             if (e.target.closest('.btn-icon')) return;
-            await useConnection(id);
+            await useConnection(id, 'data');
         });
         card.querySelector('.edit').addEventListener('click', () => openEditModal(id));
         card.querySelector('.delete').addEventListener('click', () => {
-            showConfirm('确定删除此连接？', async () => {
+            showConfirm('确定删除此连接？删除后不可恢复', async () => {
                 await fetchJSON(`/api/connections/${id}`, { method: 'DELETE' });
                 await loadConnections();
-            });
+            }, null, { confirmText: '删除', danger: true });
         });
     });
 }
@@ -358,13 +489,14 @@ function resetTableViewState() {
     state.colWidths = {};
     state.equalWidth = false;
     state.hiddenCols = new Set();
-    const btnEqual = document.getElementById('btn-equal-width');
-    if (btnEqual) btnEqual.classList.remove('active');
     state.allColumns = [];
+    state.columnTypes = {};
     state.lastTableData = null;
     state.filterCol = '';
     state.filterOp = 'contains';
     state.filterVal = '';
+    const btnEqual = document.getElementById('btn-equal-width');
+    if (btnEqual) btnEqual.classList.remove('active');
     const filterValInput = document.getElementById('filter-val-input');
     if (filterValInput) {
         filterValInput.value = '';
@@ -394,7 +526,17 @@ function updateFilterUIState() {
     if (badge) badge.classList.toggle('hidden', !hasFilter);
 }
 
-async function useConnection(id) {
+function syncConnTypeLabels() {
+    const isRedis = currentConnType === 'redis';
+    const labelNewQuery = document.getElementById('label-new-query');
+    const labelAddRow = document.getElementById('label-add-row');
+    const sqlLabel = document.getElementById('sql-editor-label');
+    if (labelNewQuery) labelNewQuery.textContent = isRedis ? '命令终端' : 'SQL 查询';
+    if (labelAddRow) labelAddRow.textContent = isRedis ? '新增 Key' : '新增记录';
+    if (sqlLabel) sqlLabel.textContent = isRedis ? 'Redis 命令终端' : 'SQL 编辑器';
+}
+
+async function useConnection(id, targetView = 'data') {
     try {
         await fetchJSON(`/api/connections/${id}/use`, { method: 'POST' });
     } catch (err) {
@@ -404,18 +546,27 @@ async function useConnection(id) {
     currentConnId = id;
     const conn = connections.find(c => c.id === id);
     currentConnType = conn?.type || 'postgresql';
-    showDataView();
+    syncConnTypeLabels();
+
     const hist = initData.states?.[id] || {};
     if (hist.sql) document.getElementById('sql-input').value = hist.sql;
-    state.db = hist.db || '';
-    state.table = hist.table || '';
+    state.db = hist.db || (currentConnType === 'redis' ? 'db0' : '');
+    state.table = hist.table || (currentConnType === 'redis' ? 'ALL' : '');
     resetTableViewState();
+
+    if (targetView === 'sql') {
+        showSqlView();
+        populateSqlDefaultInput();
+    } else {
+        showDataView();
+    }
     await loadDatabases();
     await loadTables();
     await loadData();
 }
 
 function showConnectionsView() {
+    currentView = 'connections';
     document.getElementById('connections-view').classList.remove('hidden');
     document.getElementById('data-view').classList.add('hidden');
     document.getElementById('sql-view').classList.add('hidden');
@@ -424,47 +575,74 @@ function showConnectionsView() {
     resetTableViewState();
     currentConnId = null;
     currentConnType = 'postgresql';
+    updateHeaderConnSwitcher();
+    updateUrlHash();
 }
 
 function showDataView() {
+    currentView = 'data';
     document.getElementById('connections-view').classList.add('hidden');
     document.getElementById('data-view').classList.remove('hidden');
     document.getElementById('sql-view').classList.add('hidden');
+    updateHeaderConnSwitcher();
+    updateUrlHash();
 }
 
 function showSqlView() {
+    currentView = 'sql';
     document.getElementById('connections-view').classList.add('hidden');
     document.getElementById('data-view').classList.add('hidden');
     document.getElementById('sql-view').classList.remove('hidden');
+    updateHeaderConnSwitcher();
+    updateUrlHash();
     loadSqlDatabases();
+    renderQueryHistoryMenu();
 }
 
 /* ===== 连接弹窗 ===== */
+function syncModalFieldHints(connType) {
+    const isRedis = connType === 'redis';
+    document.getElementById('modal-user-hint').classList.toggle('hidden', !isRedis);
+    document.getElementById('modal-pwd-hint').classList.toggle('hidden', !isRedis);
+    document.getElementById('modal-user').placeholder = isRedis ? '默认留空' : (connType === 'mysql' ? 'root' : 'postgres');
+}
+
+function hideTestResult() {
+    const el = document.getElementById('modal-test-result');
+    el.classList.add('hidden');
+    el.classList.remove('ok', 'err');
+}
+
 function openAddModal() {
     document.getElementById('modal-title').textContent = '新建连接';
     document.getElementById('modal-conn-id').value = '';
     document.getElementById('modal-name').value = '';
     document.getElementById('modal-type').value = 'postgresql';
     syncCustomSelect(document.getElementById('modal-type'));
+    syncModalFieldHints('postgresql');
     document.getElementById('modal-host').value = 'localhost';
     document.getElementById('modal-port').value = '5432';
     document.getElementById('modal-user').value = '';
     document.getElementById('modal-password').value = '';
+    hideTestResult();
     document.getElementById('conn-modal').classList.remove('hidden');
 }
 
 function openEditModal(id) {
     const c = connections.find(x => x.id === id);
     if (!c) return;
+    const t = c.type || 'postgresql';
     document.getElementById('modal-title').textContent = '编辑连接';
     document.getElementById('modal-conn-id').value = c.id;
     document.getElementById('modal-name').value = c.name;
-    document.getElementById('modal-type').value = c.type || 'postgresql';
+    document.getElementById('modal-type').value = t;
     syncCustomSelect(document.getElementById('modal-type'));
+    syncModalFieldHints(t);
     document.getElementById('modal-host').value = c.host;
     document.getElementById('modal-port').value = c.port;
-    document.getElementById('modal-user').value = c.user;
-    document.getElementById('modal-password').value = c.password;
+    document.getElementById('modal-user').value = c.user || '';
+    document.getElementById('modal-password').value = c.password || '';
+    hideTestResult();
     document.getElementById('conn-modal').classList.remove('hidden');
 }
 
@@ -472,26 +650,60 @@ function closeModal() {
     document.getElementById('conn-modal').classList.add('hidden');
 }
 
-async function saveModal() {
-    const id = document.getElementById('modal-conn-id').value;
+function buildConnFormBody() {
     const body = new URLSearchParams();
-    body.append('name', document.getElementById('modal-name').value);
+    body.append('name', document.getElementById('modal-name').value.trim() || '未命名连接');
     body.append('conn_type', document.getElementById('modal-type').value);
-    body.append('host', document.getElementById('modal-host').value);
-    body.append('port', document.getElementById('modal-port').value);
-    body.append('user', document.getElementById('modal-user').value);
+    body.append('host', document.getElementById('modal-host').value.trim() || 'localhost');
+    body.append('port', document.getElementById('modal-port').value.trim() || '5432');
+    body.append('user', document.getElementById('modal-user').value.trim());
     body.append('password', document.getElementById('modal-password').value);
-
-    if (id) {
-        await fetchJSON(`/api/connections/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    } else {
-        await fetchJSON('/api/connections', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-    }
-    closeModal();
-    await loadConnections();
+    return body;
 }
 
-/* ===== 数据查询 ===== */
+async function testModalConnection() {
+    const btn = document.getElementById('btn-test-conn');
+    const resEl = document.getElementById('modal-test-result');
+    btn.disabled = true;
+    btn.textContent = '测试中...';
+    hideTestResult();
+    try {
+        const body = buildConnFormBody();
+        await fetchJSON('/api/connections/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body
+        });
+        resEl.textContent = '连接成功';
+        resEl.classList.add('ok');
+        resEl.classList.remove('hidden');
+    } catch (err) {
+        resEl.textContent = '连接失败: ' + err.message;
+        resEl.classList.add('err');
+        resEl.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '测试连接';
+    }
+}
+
+async function saveModal() {
+    const id = document.getElementById('modal-conn-id').value;
+    const body = buildConnFormBody();
+    try {
+        if (id) {
+            await fetchJSON(`/api/connections/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+        } else {
+            await fetchJSON('/api/connections', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+        }
+        closeModal();
+        await loadConnections();
+    } catch (err) {
+        showAlert('保存失败: ' + err.message);
+    }
+}
+
+/* ===== 数据查询与渲染 ===== */
 async function loadDatabases() {
     const sel = document.getElementById('db-select');
     sel.innerHTML = '<option value="">选择数据库</option>';
@@ -512,7 +724,7 @@ async function loadDatabases() {
 
 async function loadTables() {
     const sel = document.getElementById('table-select');
-    sel.innerHTML = '<option value="">选择表</option>';
+    sel.innerHTML = `<option value="">${currentConnType === 'redis' ? '选择类型' : '选择表'}</option>`;
     if (!state.db) {
         syncCustomSelect(sel);
         return;
@@ -521,7 +733,8 @@ async function loadTables() {
         const data = await fetchJSON(`/api/tables?db=${encodeURIComponent(state.db)}`);
         data.tables.forEach(t => {
             const opt = document.createElement('option');
-            opt.value = t; opt.textContent = t;
+            opt.value = t;
+            opt.textContent = (currentConnType === 'redis' && t === 'ALL') ? '全部类型 (ALL)' : t;
             if (t === state.table) opt.selected = true;
             sel.appendChild(opt);
         });
@@ -545,26 +758,28 @@ function colWidthStyle(widthMap, col, equalCount = 0) {
 }
 
 function attachColumnResizers(tableEl, widthMap) {
-    const ths = Array.from(tableEl.querySelectorAll('thead th'));
-    ths.forEach((th, colIdx) => {
+    const ths = Array.from(tableEl.querySelectorAll('thead th:not(.row-index-col):not(.row-action-col)'));
+    ths.forEach((th) => {
         const resizer = th.querySelector('.col-resizer');
         if (!resizer) return;
         const colName = th.dataset.col;
+        const domIdx = Array.from(th.parentNode.children).indexOf(th);
         resizer.addEventListener('click', (e) => e.stopPropagation());
         resizer.addEventListener('mousedown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             if (tableEl.classList.contains('equal-width')) {
-                ths.forEach((h, i) => {
+                ths.forEach((h) => {
                     const cw = Math.round(h.getBoundingClientRect().width);
                     const cname = h.dataset.col;
+                    const hDomIdx = Array.from(h.parentNode.children).indexOf(h);
                     if (widthMap && cname) widthMap[cname] = cw;
                     h.style.width = cw + 'px';
                     h.style.minWidth = cw + 'px';
                     h.style.maxWidth = cw + 'px';
                     tableEl.querySelectorAll('tbody tr').forEach(tr => {
-                        const cell = tr.children[i];
-                        if (cell && !cell.hasAttribute('colspan')) {
+                        const cell = tr.children[hDomIdx];
+                        if (cell && !cell.hasAttribute('colspan') && !cell.classList.contains('row-action-col') && !cell.classList.contains('row-index-col')) {
                             cell.style.width = cw + 'px';
                             cell.style.minWidth = cw + 'px';
                             cell.style.maxWidth = cw + 'px';
@@ -584,7 +799,7 @@ function attachColumnResizers(tableEl, widthMap) {
             document.body.classList.add('col-resizing');
 
             const onMouseMove = (moveEvent) => {
-                const newWidth = Math.max(60, Math.round(startWidth + (moveEvent.clientX - startX)));
+                const newWidth = Math.max(64, Math.round(startWidth + (moveEvent.clientX - startX)));
                 if (widthMap && colName) {
                     widthMap[colName] = newWidth;
                 }
@@ -592,8 +807,8 @@ function attachColumnResizers(tableEl, widthMap) {
                 th.style.minWidth = newWidth + 'px';
                 th.style.maxWidth = newWidth + 'px';
                 tableEl.querySelectorAll('tbody tr').forEach(tr => {
-                    const td = tr.children[colIdx];
-                    if (td && !td.hasAttribute('colspan')) {
+                    const td = tr.children[domIdx];
+                    if (td && !td.hasAttribute('colspan') && !td.classList.contains('row-action-col') && !td.classList.contains('row-index-col')) {
                         td.style.width = newWidth + 'px';
                         td.style.minWidth = newWidth + 'px';
                         td.style.maxWidth = newWidth + 'px';
@@ -667,23 +882,18 @@ function renderColPickerList(filter = '') {
     });
 }
 
-function syncTableColumnsUI(columns) {
-    const colPicker = document.getElementById('col-picker');
-    const btnEqual = document.getElementById('btn-equal-width');
-    const btnFilter = document.getElementById('btn-toggle-filter');
+function syncTableColumnsUI(columns, colTypes = {}) {
+    const ids = ['col-picker', 'btn-equal-width', 'btn-toggle-filter', 'btn-refresh-data', 'btn-add-row', 'export-picker', 'toolbar-div-1'];
     const prevKey = state.allColumns.join('\0');
     const nextKey = columns.join('\0');
     state.allColumns = columns.slice();
+    state.columnTypes = colTypes || {};
 
     if (!columns.length) {
-        if (colPicker) colPicker.classList.add('hidden');
-        if (btnEqual) btnEqual.classList.add('hidden');
-        if (btnFilter) btnFilter.classList.add('hidden');
+        ids.forEach(id => document.getElementById(id)?.classList.add('hidden'));
         return;
     }
-    if (colPicker) colPicker.classList.remove('hidden');
-    if (btnEqual) btnEqual.classList.remove('hidden');
-    if (btnFilter) btnFilter.classList.remove('hidden');
+    ids.forEach(id => document.getElementById(id)?.classList.remove('hidden'));
 
     updateColPickerLabel();
     const searchInput = document.getElementById('col-picker-search');
@@ -705,19 +915,50 @@ function syncTableColumnsUI(columns) {
     }
 }
 
+function renderCellInnerHtml(val, colName = '') {
+    const expandBtn = `<button type="button" class="cell-expand-btn" title="展开详情编辑器">${SELECT_ICONS.expand}</button>`;
+    if (val === null || val === undefined) {
+        return `<span class="null-badge">NULL</span>${expandBtn}`;
+    }
+    if (typeof val === 'boolean') {
+        return `<span class="bool-badge ${val ? 'is-true' : 'is-false'}">${val ? 'true' : 'false'}</span>${expandBtn}`;
+    }
+    const formatted = formatCellValue(val);
+    if (currentConnType === 'redis') {
+        if (colName === 'type') {
+            const safeT = escapeHtml(formatted.toLowerCase());
+            return `<span class="redis-type-badge redis-type-${safeT}">${escapeHtml(formatted)}</span>${expandBtn}`;
+        }
+        if (colName === 'ttl') {
+            const num = Number(val);
+            if (num === -1) return `<span class="ttl-forever">永久 (-1)</span>${expandBtn}`;
+            if (!Number.isNaN(num) && num >= 0) return `<span class="ttl-sec">${escapeHtml(String(num))}s</span>${expandBtn}`;
+        }
+    }
+    const trimmed = formatted.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        return `<span class="cell-json">${escapeHtml(formatted)}</span>${expandBtn}`;
+    }
+    return `<span class="cell-text">${escapeHtml(formatted)}</span>${expandBtn}`;
+}
+
 function renderDataTable(data) {
     const tableEl = document.getElementById('data-table');
     const thead = tableEl.querySelector('thead');
     const tbody = tableEl.querySelector('tbody');
     const visibleCols = data.columns.filter(c => !state.hiddenCols.has(c));
     const equalCount = state.equalWidth ? visibleCols.length : 0;
+    const colTypes = data.column_types || {};
     tableEl.classList.toggle('equal-width', Boolean(state.equalWidth && visibleCols.length > 0));
 
-    thead.innerHTML = '<tr>' + visibleCols.map(c => {
+    thead.innerHTML = '<tr><th class="row-index-col">#</th>' + visibleCols.map(c => {
         const isSorted = state.sortCol === c;
         const dirClass = isSorted ? (state.sortDir === 'desc' ? ' sort-active sort-desc' : ' sort-active sort-asc') : '';
-        return `<th class="sortable${dirClass}" data-col="${escapeHtml(c)}"${colWidthStyle(state.colWidths, c, equalCount)} title="点击切换排序"><span class="th-inner"><span>${escapeHtml(c)}</span><span class="sort-icon"><span class="sort-arrow up"></span><span class="sort-arrow down"></span></span></span><span class="col-resizer" title="左右拖动调整列宽"></span></th>`;
-    }).join('') + '</tr>';
+        const isPk = data.pk && data.pk === c;
+        const pkBadge = isPk ? `<span class="pk-icon" title="主键列 (Primary Key)">${SELECT_ICONS.pk}</span>` : '';
+        const typeSub = colTypes[c] ? `<span class="col-type-sub">${escapeHtml(colTypes[c])}</span>` : '';
+        return `<th class="sortable${dirClass}" data-col="${escapeHtml(c)}"${colWidthStyle(state.colWidths, c, equalCount)} title="点击切换排序"><span class="th-inner"><span class="th-col-stack"><span class="th-col-name">${pkBadge}<span>${escapeHtml(c)}</span></span>${typeSub}</span><span class="sort-icon"><span class="sort-arrow up"></span><span class="sort-arrow down"></span></span></span><span class="col-resizer" title="左右拖动调整列宽"></span></th>`;
+    }).join('') + '<th class="row-action-col" title="操作"></th></tr>';
 
     thead.querySelectorAll('th.sortable').forEach(th => {
         th.addEventListener('click', async (e) => {
@@ -738,17 +979,84 @@ function renderDataTable(data) {
     });
 
     if (!data.data.length) {
-        tbody.innerHTML = '<tr><td colspan="100" class="empty">暂无数据</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="100" class="empty">${emptyHtml('当前条件下暂无数据')}</td></tr>`;
     } else {
         const pkColumn = data.pk || data.columns[0];
-        tbody.innerHTML = data.data.map(row => '<tr>' + visibleCols.map(c => `<td class="editable-cell"${colWidthStyle(state.colWidths, c, equalCount)}>${escapeHtml(formatCellValue(row[c]))}</td>`).join('') + '</tr>').join('');
+        const rowOffset = (state.page - 1) * state.size;
+        tbody.innerHTML = data.data.map((row, rIdx) => {
+            const seq = rowOffset + rIdx + 1;
+            const cellsHtml = visibleCols.map(c => {
+                const rawVal = row[c];
+                const isNull = rawVal === null || rawVal === undefined;
+                return `<td class="editable-cell" data-isnull="${isNull ? '1' : '0'}"${colWidthStyle(state.colWidths, c, equalCount)}>${renderCellInnerHtml(rawVal, c)}</td>`;
+            }).join('');
+            return `<tr><td class="row-index-col">${seq}</td>${cellsHtml}<td class="row-action-col"><button type="button" class="row-del-btn" title="删除此行" aria-label="删除此行">${SELECT_ICONS.trash}</button></td></tr>`;
+        }).join('');
+
         tbody.querySelectorAll('tr').forEach((tr, rowIdx) => {
-            const pkVal = data.data[rowIdx][pkColumn];
-            tr.querySelectorAll('td').forEach((td, colIdx) => {
+            const rowObj = data.data[rowIdx];
+            const pkVal = rowObj[pkColumn];
+
+            tr.querySelectorAll('td.editable-cell').forEach((td, colIdx) => {
+                const colName = visibleCols[colIdx];
+                const rawVal = rowObj[colName];
                 td.dataset.pk = String(pkVal ?? '');
-                td.dataset.col = visibleCols[colIdx];
-                td.addEventListener('dblclick', () => startEdit(td, state.db, state.table, pkColumn));
-                td.addEventListener('click', () => { if (!td.querySelector('input')) copyCell(td); });
+                td.dataset.col = colName;
+                td.dataset.raw = rawVal === null || rawVal === undefined ? '' : formatCellValue(rawVal);
+
+                let clickTimer = null;
+
+                td.querySelector('.cell-expand-btn')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+                    openCellModal({
+                        readonly: false,
+                        db: state.db,
+                        table: state.table,
+                        pkColumn,
+                        pkVal: String(pkVal ?? ''),
+                        colName,
+                        colType: colTypes[colName] || '',
+                        isNull: td.dataset.isnull === '1',
+                        value: td.dataset.raw
+                    });
+                });
+
+                td.addEventListener('click', (e) => {
+                    if (td.querySelector('input') || e.target.closest('.cell-expand-btn')) return;
+                    if (clickTimer) clearTimeout(clickTimer);
+                    clickTimer = setTimeout(() => {
+                        clickTimer = null;
+                        if (!td.querySelector('input')) {
+                            copyText(td.dataset.isnull === '1' ? 'NULL' : td.dataset.raw);
+                        }
+                    }, 200);
+                });
+
+                td.addEventListener('dblclick', (e) => {
+                    if (e.target.closest('.cell-expand-btn')) return;
+                    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+                    startEdit(td, state.db, state.table, pkColumn);
+                });
+            });
+
+            tr.querySelector('.row-del-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (pkVal === null || pkVal === undefined || pkVal === '') {
+                    showAlert('当前行缺少有效主键值，无法直接按主键删除');
+                    return;
+                }
+                const targetDesc = `${pkColumn} = ${pkVal}`;
+                showConfirm(`确定删除此条记录 (${targetDesc})？`, async () => {
+                    try {
+                        const q = `db=${encodeURIComponent(state.db)}&table=${encodeURIComponent(state.table)}&pk_col=${encodeURIComponent(pkColumn)}&pk_val=${encodeURIComponent(String(pkVal))}`;
+                        await fetchJSON(`/api/data?${q}`, { method: 'DELETE' });
+                        showToast('已删除');
+                        await loadData();
+                    } catch (err) {
+                        showAlert('删除失败: ' + err.message);
+                    }
+                }, null, { confirmText: '删除', danger: true });
             });
         });
     }
@@ -757,39 +1065,72 @@ function renderDataTable(data) {
 }
 
 async function loadData() {
+    const wrap = document.getElementById('table-wrap');
+    const refreshIcon = document.getElementById('icon-refresh');
     const thead = document.querySelector('#data-table thead');
     const tbody = document.querySelector('#data-table tbody');
     const pagination = document.getElementById('pagination');
     if (!state.db || !state.table) {
         thead.innerHTML = '';
-        tbody.innerHTML = '<tr><td colspan="100" class="empty">请选择数据库和表</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="100" class="empty">${emptyHtml(currentConnType === 'redis' ? '请选择 Redis 库与数据类型' : '请选择数据库和数据表')}</td></tr>`;
         pagination.classList.add('hidden');
         syncTableColumnsUI([]);
         return;
     }
-    let url = `/api/data?db=${encodeURIComponent(state.db)}&table=${encodeURIComponent(state.table)}&page=${state.page}&size=${state.size}`;
-    if (state.sortCol) {
-        url += `&sort_col=${encodeURIComponent(state.sortCol)}&sort_dir=${encodeURIComponent(state.sortDir || 'asc')}`;
+    wrap?.classList.add('loading');
+    refreshIcon?.classList.add('spinning');
+    try {
+        let url = `/api/data?db=${encodeURIComponent(state.db)}&table=${encodeURIComponent(state.table)}&page=${state.page}&size=${state.size}`;
+        if (state.sortCol) {
+            url += `&sort_col=${encodeURIComponent(state.sortCol)}&sort_dir=${encodeURIComponent(state.sortDir || 'asc')}`;
+        }
+        if (state.filterCol && (state.filterOp === 'isnull' || state.filterOp === 'notnull' || state.filterVal !== '')) {
+            url += `&filter_col=${encodeURIComponent(state.filterCol)}&filter_op=${encodeURIComponent(state.filterOp || 'contains')}&filter_val=${encodeURIComponent(state.filterVal)}`;
+        }
+        const data = await fetchJSON(url);
+        state.lastTableData = data;
+        syncTableColumnsUI(data.columns, data.column_types);
+        renderDataTable(data);
+        state.total = data.total;
+        state.pages = Math.max(1, data.pages || 1);
+        document.getElementById('page-num').textContent = state.page;
+        document.getElementById('page-total').textContent = state.pages;
+        document.getElementById('row-total').textContent = state.total;
+        renderPageNumbers();
+        pagination.classList.remove('hidden');
+    } catch (err) {
+        showAlert('加载数据失败: ' + err.message);
+    } finally {
+        wrap?.classList.remove('loading');
+        refreshIcon?.classList.remove('spinning');
     }
-    if (state.filterCol && (state.filterOp === 'isnull' || state.filterOp === 'notnull' || state.filterVal !== '')) {
-        url += `&filter_col=${encodeURIComponent(state.filterCol)}&filter_op=${encodeURIComponent(state.filterOp || 'contains')}&filter_val=${encodeURIComponent(state.filterVal)}`;
-    }
-    const data = await fetchJSON(url);
-    state.lastTableData = data;
-    syncTableColumnsUI(data.columns);
-    renderDataTable(data);
-    state.total = data.total;
-    state.pages = Math.max(1, data.pages || 1);
-    document.getElementById('page-num').textContent = state.page;
-    document.getElementById('page-total').textContent = state.pages;
-    document.getElementById('row-total').textContent = state.total;
-    renderPageNumbers();
-    pagination.classList.remove('hidden');
+}
+
+/* ===== 内联编辑与详情弹窗编辑 ===== */
+async function submitCellUpdate({ db, table, pkColumn, pkVal, colName, value, isNull }) {
+    const body = new URLSearchParams();
+    body.append('db', db);
+    body.append('table', table);
+    body.append('pk_col', pkColumn);
+    body.append('pk_val', pkVal);
+    body.append('column', colName);
+    body.append('value', value);
+    body.append('is_null', isNull ? '1' : '0');
+    await fetchJSON('/api/data', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+    });
 }
 
 async function startEdit(td, db, table, pkColumn) {
     if (td.querySelector('input')) return;
-    const originalValue = td.textContent;
+    if (currentConnType === 'redis' && td.dataset.col === 'type') {
+        showToast('Redis Key 类型不可直接修改');
+        return;
+    }
+    const wasNull = td.dataset.isnull === '1';
+    const originalValue = td.dataset.raw || '';
     const pk = td.dataset.pk;
     const col = td.dataset.col;
     const tableEl = document.getElementById('data-table');
@@ -808,50 +1149,257 @@ async function startEdit(td, db, table, pkColumn) {
     td.appendChild(input);
     input.focus();
     input.select();
-    const restore = (val) => {
-        td.textContent = val;
-        td.style.width = '';
-        td.style.height = '';
+
+    const restore = (val, isNullFlag) => {
+        td.dataset.isnull = isNullFlag ? '1' : '0';
+        td.dataset.raw = isNullFlag ? '' : val;
+        td.innerHTML = renderCellInnerHtml(isNullFlag ? null : val, col);
+        td.querySelector('.cell-expand-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openCellModal({
+                readonly: false,
+                db,
+                table,
+                pkColumn,
+                pkVal: pk,
+                colName: col,
+                colType: state.columnTypes[col] || '',
+                isNull: td.dataset.isnull === '1',
+                value: td.dataset.raw
+            });
+        });
+        const savedWidth = state.colWidths[col];
+        if (!savedWidth) {
+            td.style.width = '';
+            td.style.height = '';
+        } else {
+            td.style.height = '';
+        }
     };
+
+    let finished = false;
     const save = () => {
+        if (finished) return;
+        finished = true;
         const newValue = input.value;
-        if (newValue === originalValue) {
-            restore(originalValue);
+        if (!wasNull && newValue === originalValue) {
+            restore(originalValue, false);
+            return;
+        }
+        if (wasNull && newValue === '') {
+            restore('', true);
             return;
         }
         showConfirm('内容已修改，是否保存？', async () => {
             try {
-                const body = new URLSearchParams();
-                body.append('db', db);
-                body.append('table', table);
-                body.append('pk_col', pkColumn);
-                body.append('pk_val', pk);
-                body.append('column', col);
-                body.append('value', newValue);
-                await fetchJSON('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-                restore(newValue);
+                await submitCellUpdate({ db, table, pkColumn, pkVal: pk, colName: col, value: newValue, isNull: false });
+                restore(newValue, false);
+                showToast('已保存');
+                if (currentConnType === 'redis' && col === 'key') {
+                    await loadData();
+                }
             } catch (err) {
                 showAlert('保存失败: ' + err.message);
-                restore(originalValue);
+                restore(originalValue, wasNull);
             }
         }, () => {
-            restore(originalValue);
-        });
+            restore(originalValue, wasNull);
+        }, { confirmText: '保存' });
     };
-    const cancel = () => { restore(originalValue); };
+
+    const cancel = () => {
+        if (finished) return;
+        finished = true;
+        restore(originalValue, wasNull);
+    };
+
     input.addEventListener('blur', save);
     input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { input.blur(); }
-        else if (e.key === 'Escape') { cancel(); }
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
     });
 }
 
+function openCellModal(ctx) {
+    cellModalCtx = ctx;
+    document.getElementById('cell-modal-title').textContent = ctx.readonly ? `查看字段 · ${ctx.colName}` : `编辑字段 · ${ctx.colName}`;
+    const metaParts = [];
+    if (ctx.colType) metaParts.push(ctx.colType);
+    if (!ctx.readonly && ctx.pkColumn) metaParts.push(`${ctx.pkColumn} = ${ctx.pkVal}`);
+    if (ctx.isNull) metaParts.push('当前值: NULL');
+    document.getElementById('cell-modal-meta').textContent = metaParts.join(' · ');
+
+    const ta = document.getElementById('cell-modal-textarea');
+    let displayVal = ctx.value || '';
+    try {
+        const trimmed = displayVal.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            displayVal = JSON.stringify(JSON.parse(trimmed), null, 2);
+        }
+    } catch (_) {}
+    ta.value = displayVal;
+    ta.readOnly = Boolean(ctx.readonly);
+
+    const canSetNull = !ctx.readonly && currentConnType !== 'redis';
+    document.getElementById('btn-cell-set-null').classList.toggle('hidden', !canSetNull);
+    document.getElementById('btn-cell-save').classList.toggle('hidden', Boolean(ctx.readonly));
+    document.getElementById('cell-modal').classList.remove('hidden');
+    requestAnimationFrame(() => ta.focus());
+}
+
+function closeCellModal() {
+    document.getElementById('cell-modal').classList.add('hidden');
+    cellModalCtx = null;
+}
+
+/* ===== 新增记录 / 新增 Key 弹窗 ===== */
+function openAddRowModal() {
+    if (!state.db || !state.table) return;
+    const container = document.getElementById('row-modal-fields');
+    container.innerHTML = '';
+    const isRedis = currentConnType === 'redis';
+    document.getElementById('row-modal-title').textContent = isRedis ? `新增 Redis Key (${state.db})` : `新增记录 · ${state.table}`;
+
+    if (isRedis) {
+        container.innerHTML = `
+            <div class="row-field-item">
+                <div class="row-field-top"><span class="row-field-label">Key 名称</span></div>
+                <input type="text" id="redis-new-key" class="row-field-input" placeholder="例如 user:1001">
+            </div>
+            <div class="row-field-item">
+                <div class="row-field-top"><span class="row-field-label">数据类型</span></div>
+                <select id="redis-new-type" class="row-field-input">
+                    <option value="string">string</option>
+                    <option value="hash">hash (JSON 对象)</option>
+                    <option value="list">list (JSON 数组)</option>
+                    <option value="set">set (JSON 数组)</option>
+                    <option value="zset">zset ([[member, score], ...])</option>
+                </select>
+            </div>
+            <div class="row-field-item">
+                <div class="row-field-top"><span class="row-field-label">TTL 秒数 <span class="row-field-type">(-1 表示永不过期)</span></span></div>
+                <input type="number" id="redis-new-ttl" class="row-field-input" value="-1">
+            </div>
+            <div class="row-field-item">
+                <div class="row-field-top"><span class="row-field-label">Value 内容</span></div>
+                <textarea id="redis-new-val" class="cell-modal-textarea" style="min-height:110px;" placeholder="输入字符串值"></textarea>
+            </div>
+        `;
+        const typeSel = document.getElementById('redis-new-type');
+        const valTa = document.getElementById('redis-new-val');
+        if (state.table && state.table !== 'ALL') {
+            typeSel.value = state.table;
+        }
+        const syncPlaceholder = () => {
+            const map = {
+                string: '输入字符串内容',
+                hash: '{"name": "Alice", "role": "admin"}',
+                list: '["item1", "item2"]',
+                set: '["tag1", "tag2"]',
+                zset: '[["member1", 10], ["member2", 20]]'
+            };
+            valTa.placeholder = map[typeSel.value] || '';
+        };
+        typeSel.addEventListener('change', syncPlaceholder);
+        syncPlaceholder();
+    } else {
+        const pkCol = state.lastTableData?.pk || '';
+        state.allColumns.forEach(col => {
+            const cType = state.columnTypes[col] || '';
+            const isDefaultSkip = col === pkCol || cType.includes('timestamp') || cType.includes('serial');
+            const item = document.createElement('div');
+            item.className = 'row-field-item';
+            item.dataset.col = col;
+            item.innerHTML = `
+                <div class="row-field-top">
+                    <span class="row-field-label">${escapeHtml(col)} <span class="row-field-type">${escapeHtml(cType)}</span></span>
+                    <div class="row-field-checks">
+                        <label><input type="checkbox" class="cb-skip"${isDefaultSkip ? ' checked' : ''}> 默认/跳过</label>
+                        <label><input type="checkbox" class="cb-null"> NULL</label>
+                    </div>
+                </div>
+                <input type="text" class="row-field-input" placeholder="${isDefaultSkip ? '使用数据库默认值' : '输入字段值'}"${isDefaultSkip ? ' disabled' : ''}>
+            `;
+            const cbSkip = item.querySelector('.cb-skip');
+            const cbNull = item.querySelector('.cb-null');
+            const inp = item.querySelector('.row-field-input');
+            const syncInput = () => {
+                inp.disabled = cbSkip.checked || cbNull.checked;
+                if (cbSkip.checked) inp.placeholder = '使用数据库默认值';
+                else if (cbNull.checked) inp.placeholder = 'NULL';
+                else inp.placeholder = '输入字段值';
+            };
+            cbSkip.addEventListener('change', () => {
+                if (cbSkip.checked) cbNull.checked = false;
+                syncInput();
+            });
+            cbNull.addEventListener('change', () => {
+                if (cbNull.checked) cbSkip.checked = false;
+                syncInput();
+            });
+            container.appendChild(item);
+        });
+    }
+
+    document.getElementById('row-modal').classList.remove('hidden');
+}
+
+function closeAddRowModal() {
+    document.getElementById('row-modal').classList.add('hidden');
+}
+
+async function saveNewRow() {
+    let payload = {};
+    if (currentConnType === 'redis') {
+        const key = document.getElementById('redis-new-key').value.trim();
+        const type = document.getElementById('redis-new-type').value;
+        const ttl = parseInt(document.getElementById('redis-new-ttl').value || '-1', 10);
+        const value = document.getElementById('redis-new-val').value;
+        if (!key) {
+            showToast('请填写 Key 名称');
+            return;
+        }
+        payload = { key, type, ttl: Number.isNaN(ttl) ? -1 : ttl, value };
+    } else {
+        document.querySelectorAll('#row-modal-fields .row-field-item').forEach(item => {
+            const col = item.dataset.col;
+            const skip = item.querySelector('.cb-skip').checked;
+            const isNull = item.querySelector('.cb-null').checked;
+            const val = item.querySelector('.row-field-input').value;
+            if (!skip) {
+                payload[col] = isNull ? null : val;
+            }
+        });
+    }
+
+    try {
+        const body = new URLSearchParams();
+        body.append('db', state.db);
+        body.append('table', state.table);
+        body.append('row_json', JSON.stringify(payload));
+        await fetchJSON('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body
+        });
+        closeAddRowModal();
+        showToast('新增成功');
+        await loadData();
+    } catch (err) {
+        showAlert('新增失败: ' + err.message);
+    }
+}
+
+/* ===== 确认与提示框 ===== */
 let confirmYesCallback = null;
 let confirmNoCallback = null;
 
-function showConfirm(message, onYes, onNo) {
+function showConfirm(message, onYes, onNo, opts = {}) {
+    const yesBtn = document.getElementById('btn-confirm-yes');
     document.getElementById('confirm-message').textContent = message;
-    document.getElementById('btn-confirm-yes').classList.remove('hidden');
+    yesBtn.textContent = opts.confirmText || '确定';
+    yesBtn.classList.toggle('btn-danger', Boolean(opts.danger));
+    yesBtn.classList.remove('hidden');
     document.getElementById('btn-confirm-no').classList.remove('hidden');
     document.getElementById('btn-confirm-ok').classList.add('hidden');
     document.getElementById('custom-confirm').classList.remove('hidden');
@@ -883,6 +1431,7 @@ document.getElementById('btn-confirm-ok').addEventListener('click', () => {
     document.getElementById('custom-confirm').classList.add('hidden');
 });
 
+/* ===== 分页器 ===== */
 function renderPageNumbers() {
     document.getElementById('btn-prev').disabled = state.page <= 1;
     document.getElementById('btn-first').disabled = state.page <= 1;
@@ -910,7 +1459,112 @@ function renderPageNumbers() {
     }
 }
 
-/* ===== SQL 查询 ===== */
+/* ===== 导出 CSV / JSON ===== */
+function exportRowsData(columns, rows, format, filePrefix) {
+    if (!columns?.length || !rows?.length) {
+        showToast('暂无可导出的数据');
+        return;
+    }
+    let content = '';
+    let mime = '';
+    let ext = format;
+    if (format === 'json') {
+        const out = rows.map(r => {
+            const obj = {};
+            columns.forEach(c => { obj[c] = r[c] ?? null; });
+            return obj;
+        });
+        content = JSON.stringify(out, null, 2);
+        mime = 'application/json;charset=utf-8';
+    } else {
+        const escCsv = (v) => {
+            if (v === null || v === undefined) return '';
+            const s = formatCellValue(v);
+            if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+            return s;
+        };
+        const lines = [
+            columns.map(escCsv).join(','),
+            ...rows.map(r => columns.map(c => escCsv(r[c])).join(','))
+        ];
+        content = '\uFEFF' + lines.join('\r\n');
+        mime = 'text/csv;charset=utf-8';
+    }
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filePrefix || 'export'}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(`已导出 ${ext.toUpperCase()}`);
+}
+
+/* ===== SQL 查询与命令历史 ===== */
+function getHistoryKey() {
+    return `dbpage_history_${currentConnId || 'default'}`;
+}
+
+function getQueryHistory() {
+    try {
+        return JSON.parse(localStorage.getItem(getHistoryKey()) || '[]');
+    } catch (_) {
+        return [];
+    }
+}
+
+function addQueryHistory(sql) {
+    const clean = sql.trim();
+    if (!clean) return;
+    const list = getQueryHistory().filter(item => item !== clean);
+    list.unshift(clean);
+    try {
+        localStorage.setItem(getHistoryKey(), JSON.stringify(list.slice(0, 15)));
+    } catch (_) {}
+    renderQueryHistoryMenu();
+}
+
+function renderQueryHistoryMenu() {
+    const listEl = document.getElementById('history-list');
+    if (!listEl) return;
+    const history = getQueryHistory();
+    listEl.innerHTML = '';
+    if (!history.length) {
+        listEl.innerHTML = '<div class="custom-select-empty">暂无执行历史</div>';
+        return;
+    }
+    history.forEach(cmd => {
+        const item = document.createElement('div');
+        item.className = 'custom-select-option';
+        item.title = cmd;
+        item.innerHTML = `<span class="history-item-code">${escapeHtml(cmd)}</span>`;
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('sql-input').value = cmd;
+            document.getElementById('history-picker').classList.remove('open');
+        });
+        listEl.appendChild(item);
+    });
+}
+
+function populateSqlDefaultInput() {
+    const sqlInput = document.getElementById('sql-input');
+    const hist = initData.states?.[currentConnId] || {};
+    sqlInput.placeholder = currentConnType === 'redis' ? 'KEYS * 或 GET mykey' : 'SELECT * FROM table_name LIMIT 10';
+    if (hist.sql) {
+        sqlInput.value = hist.sql;
+    } else if (currentConnType === 'redis') {
+        sqlInput.value = 'KEYS *';
+    } else if (state.table) {
+        const q = currentConnType === 'mysql' ? `\`${state.table}\`` : `"${state.table}"`;
+        sqlInput.value = `SELECT * FROM ${q} LIMIT 10`;
+    } else {
+        sqlInput.value = 'SELECT * FROM table_name LIMIT 10';
+    }
+}
+
 async function loadSqlDatabases() {
     const sel = document.getElementById('sql-db-select');
     sel.innerHTML = '<option value="">选择数据库</option>';
@@ -929,7 +1583,86 @@ async function loadSqlDatabases() {
     syncCustomSelect(sel);
 }
 
+async function runSqlQuery() {
+    const sqlInput = document.getElementById('sql-input');
+    const selText = sqlInput.value.substring(sqlInput.selectionStart, sqlInput.selectionEnd).trim();
+    const sql = selText || sqlInput.value.trim();
+    const errorEl = document.getElementById('sql-error');
+    const wrap = document.getElementById('sql-table-wrap');
+    if (!sql) return;
+    if (!state.db) {
+        errorEl.textContent = '请先选择数据库';
+        errorEl.classList.remove('hidden');
+        return;
+    }
+    errorEl.classList.add('hidden');
+    wrap?.classList.add('loading');
+    try {
+        const body = new URLSearchParams();
+        body.append('db', state.db);
+        body.append('sql', sql);
+        const data = await fetchJSON('/api/query', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+        lastSqlResultData = data;
+        const sqlTableEl = document.getElementById('sql-result-table');
+        const thead = sqlTableEl.querySelector('thead');
+        const tbody = sqlTableEl.querySelector('tbody');
+        sqlColWidths = {};
+
+        const hasRows = Boolean(data.columns.length && data.data.length);
+        document.getElementById('btn-export-sql-csv').classList.toggle('hidden', !hasRows);
+        document.getElementById('btn-export-sql-json').classList.toggle('hidden', !hasRows);
+
+        if (data.columns.length) {
+            thead.innerHTML = '<tr><th class="row-index-col">#</th>' + data.columns.map(c => `<th data-col="${escapeHtml(c)}"><span class="th-inner"><span class="th-col-name">${escapeHtml(c)}</span></span><span class="col-resizer" title="左右拖动调整列宽"></span></th>`).join('') + '</tr>';
+            if (!data.data.length) {
+                tbody.innerHTML = `<tr><td colspan="100" class="empty">${emptyHtml('查询结果为空')}</td></tr>`;
+            } else {
+                tbody.innerHTML = data.data.map((row, rIdx) => `<tr><td class="row-index-col">${rIdx + 1}</td>` + data.columns.map(c => {
+                    const rawVal = row[c];
+                    const isNull = rawVal === null || rawVal === undefined;
+                    return `<td class="copyable-cell" data-isnull="${isNull ? '1' : '0'}">${renderCellInnerHtml(rawVal, c)}</td>`;
+                }).join('') + '</tr>').join('');
+
+                tbody.querySelectorAll('tr').forEach((tr, rIdx) => {
+                    const rowObj = data.data[rIdx];
+                    tr.querySelectorAll('td.copyable-cell').forEach((td, cIdx) => {
+                        const colName = data.columns[cIdx];
+                        const rawVal = rowObj[colName];
+                        const rawStr = rawVal === null || rawVal === undefined ? '' : formatCellValue(rawVal);
+                        td.dataset.raw = rawStr;
+                        td.querySelector('.cell-expand-btn')?.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            openCellModal({
+                                readonly: true,
+                                colName,
+                                isNull: td.dataset.isnull === '1',
+                                value: rawStr
+                            });
+                        });
+                        td.addEventListener('click', (e) => {
+                            if (e.target.closest('.cell-expand-btn')) return;
+                            copyText(td.dataset.isnull === '1' ? 'NULL' : rawStr);
+                        });
+                    });
+                });
+            }
+            attachColumnResizers(sqlTableEl, sqlColWidths);
+        } else {
+            thead.innerHTML = '';
+            tbody.innerHTML = `<tr><td colspan="100" class="empty">执行成功，影响 ${data.rowcount} 行</td></tr>`;
+        }
+        addQueryHistory(sql);
+        await saveState();
+    } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.classList.remove('hidden');
+    } finally {
+        wrap?.classList.remove('loading');
+    }
+}
+
 async function saveState() {
+    if (!currentConnId) return;
     const body = new URLSearchParams();
     if (state.db) body.append('db', state.db);
     if (state.table) body.append('table', state.table);
@@ -950,6 +1683,9 @@ async function saveState() {
 
 function formatCellValue(val) {
     if (val === null || val === undefined) return '';
+    if (typeof val === 'object') {
+        try { return JSON.stringify(val); } catch (_) { return String(val); }
+    }
     if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/.test(val)) {
         const d = new Date(val);
         if (!isNaN(d.getTime())) {
@@ -966,14 +1702,14 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-async function copyCell(td) {
-    const text = td.textContent;
+async function copyText(text) {
+    const str = String(text ?? '');
     try {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(str);
         showToast('已复制');
-    } catch (err) {
+    } catch (_) {
         const textarea = document.createElement('textarea');
-        textarea.value = text;
+        textarea.value = str;
         document.body.appendChild(textarea);
         textarea.select();
         document.execCommand('copy');
@@ -998,18 +1734,39 @@ brandEl.addEventListener('keydown', (e) => {
         showConnectionsView();
     }
 });
+
+document.getElementById('header-conn-trigger').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const switcher = document.getElementById('header-conn-switcher');
+    const isOpen = switcher.classList.contains('open');
+    closeAllCustomSelects(switcher);
+    switcher.classList.toggle('open', !isOpen);
+});
+
+document.querySelectorAll('#conn-filter-tabs .conn-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        connFilterType = btn.dataset.type || 'all';
+        renderConnFilterTabs();
+        renderCards();
+    });
+});
+
 document.getElementById('btn-add-conn').addEventListener('click', openAddModal);
+document.getElementById('btn-test-conn').addEventListener('click', testModalConnection);
 document.getElementById('btn-cancel-conn').addEventListener('click', closeModal);
 document.getElementById('btn-save-conn').addEventListener('click', saveModal);
 document.getElementById('btn-back').addEventListener('click', showConnectionsView);
 
 document.getElementById('modal-type').addEventListener('change', (e) => {
-    document.getElementById('modal-port').value = e.target.value === 'mysql' ? '3306' : '5432';
+    const t = e.target.value;
+    document.getElementById('modal-port').value = t === 'mysql' ? '3306' : (t === 'redis' ? '6379' : '5432');
+    syncModalFieldHints(t);
+    hideTestResult();
 });
 
 document.getElementById('db-select').addEventListener('change', async (e) => {
     state.db = e.target.value;
-    state.table = '';
+    state.table = (currentConnType === 'redis' && state.db) ? 'ALL' : '';
     resetTableViewState();
     if (!state.db) {
         document.querySelector('#data-table thead').innerHTML = '';
@@ -1026,6 +1783,69 @@ document.getElementById('table-select').addEventListener('change', async (e) => 
     resetTableViewState();
     await loadData();
     await saveState();
+});
+
+document.getElementById('btn-refresh-data').addEventListener('click', async () => {
+    await loadData();
+});
+
+document.getElementById('btn-add-row').addEventListener('click', openAddRowModal);
+document.getElementById('btn-cancel-row').addEventListener('click', closeAddRowModal);
+document.getElementById('btn-save-row').addEventListener('click', saveNewRow);
+
+/* 单元格详情弹窗事件 */
+document.getElementById('btn-cell-cancel').addEventListener('click', closeCellModal);
+document.getElementById('btn-cell-copy').addEventListener('click', () => {
+    copyText(document.getElementById('cell-modal-textarea').value);
+});
+document.getElementById('btn-cell-format-json').addEventListener('click', () => {
+    const ta = document.getElementById('cell-modal-textarea');
+    try {
+        const parsed = JSON.parse(ta.value);
+        ta.value = JSON.stringify(parsed, null, 2);
+        showToast('JSON 已格式化');
+    } catch (_) {
+        showToast('当前内容不是有效的 JSON');
+    }
+});
+document.getElementById('btn-cell-set-null').addEventListener('click', async () => {
+    if (!cellModalCtx || cellModalCtx.readonly) return;
+    try {
+        await submitCellUpdate({
+            db: cellModalCtx.db,
+            table: cellModalCtx.table,
+            pkColumn: cellModalCtx.pkColumn,
+            pkVal: cellModalCtx.pkVal,
+            colName: cellModalCtx.colName,
+            value: '',
+            isNull: true
+        });
+        closeCellModal();
+        showToast('已设为 NULL');
+        await loadData();
+    } catch (err) {
+        showAlert('更新失败: ' + err.message);
+    }
+});
+document.getElementById('btn-cell-save').addEventListener('click', async () => {
+    if (!cellModalCtx || cellModalCtx.readonly) return;
+    const newVal = document.getElementById('cell-modal-textarea').value;
+    try {
+        await submitCellUpdate({
+            db: cellModalCtx.db,
+            table: cellModalCtx.table,
+            pkColumn: cellModalCtx.pkColumn,
+            pkVal: cellModalCtx.pkVal,
+            colName: cellModalCtx.colName,
+            value: newVal,
+            isNull: false
+        });
+        closeCellModal();
+        showToast('已保存');
+        await loadData();
+    } catch (err) {
+        showAlert('保存失败: ' + err.message);
+    }
 });
 
 /* 字段显示选择器事件 */
@@ -1072,6 +1892,25 @@ document.getElementById('col-picker-invert').addEventListener('click', (e) => {
     updateColPickerLabel();
     renderColPickerList(document.getElementById('col-picker-search').value);
     if (state.lastTableData) renderDataTable(state.lastTableData);
+});
+
+/* 导出菜单事件 */
+document.getElementById('export-picker-trigger').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const picker = document.getElementById('export-picker');
+    const isOpen = picker.classList.contains('open');
+    closeAllCustomSelects(picker);
+    picker.classList.toggle('open', !isOpen);
+});
+
+document.querySelectorAll('#export-picker .custom-select-option').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.getElementById('export-picker').classList.remove('open');
+        if (!state.lastTableData) return;
+        const visibleCols = state.lastTableData.columns.filter(c => !state.hiddenCols.has(c));
+        exportRowsData(visibleCols, state.lastTableData.data, opt.dataset.format, `${state.db}_${state.table}`);
+    });
 });
 
 /* 平分宽度切换事件 */
@@ -1146,15 +1985,7 @@ document.getElementById('btn-last').addEventListener('click', async () => { if (
 
 document.getElementById('btn-new-query').addEventListener('click', () => {
     showSqlView();
-    const hist = initData.states?.[currentConnId] || {};
-    if (hist.sql) {
-        document.getElementById('sql-input').value = hist.sql;
-    } else if (state.table) {
-        const q = currentConnType === 'mysql' ? `\`${state.table}\`` : `"${state.table}"`;
-        document.getElementById('sql-input').value = `SELECT * FROM ${q} LIMIT 10`;
-    } else {
-        document.getElementById('sql-input').value = 'SELECT * FROM table_name LIMIT 10';
-    }
+    populateSqlDefaultInput();
 });
 
 document.getElementById('btn-back-data').addEventListener('click', () => {
@@ -1166,34 +1997,39 @@ document.getElementById('sql-db-select').addEventListener('change', async (e) =>
     await saveState();
 });
 
-document.getElementById('btn-run-sql').addEventListener('click', async () => {
-    const sql = document.getElementById('sql-input').value.trim();
-    const errorEl = document.getElementById('sql-error');
-    if (!sql) return;
-    if (!state.db) { errorEl.textContent = '请先选择数据库'; errorEl.classList.remove('hidden'); return; }
-    errorEl.classList.add('hidden');
-    try {
-        const body = new URLSearchParams();
-        body.append('db', state.db);
-        body.append('sql', sql);
-        const data = await fetchJSON('/api/query', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-        const sqlTableEl = document.getElementById('sql-result-table');
-        const thead = sqlTableEl.querySelector('thead');
-        const tbody = sqlTableEl.querySelector('tbody');
-        sqlColWidths = {};
-        if (data.columns.length) {
-            thead.innerHTML = '<tr>' + data.columns.map(c => `<th data-col="${escapeHtml(c)}"><span class="th-inner"><span>${escapeHtml(c)}</span></span><span class="col-resizer" title="左右拖动调整列宽"></span></th>`).join('') + '</tr>';
-            tbody.innerHTML = data.data.map(row => '<tr>' + data.columns.map(c => `<td class="copyable-cell">${escapeHtml(formatCellValue(row[c]))}</td>`).join('') + '</tr>').join('');
-            tbody.querySelectorAll('td').forEach(td => td.addEventListener('click', () => copyCell(td)));
-            attachColumnResizers(sqlTableEl, sqlColWidths);
-        } else {
-            thead.innerHTML = '';
-            tbody.innerHTML = `<tr><td colspan="100" class="empty">执行成功，影响 ${data.rowcount} 行</td></tr>`;
+document.getElementById('history-picker-trigger').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const picker = document.getElementById('history-picker');
+    const isOpen = picker.classList.contains('open');
+    closeAllCustomSelects(picker);
+    if (!isOpen) renderQueryHistoryMenu();
+    picker.classList.toggle('open', !isOpen);
+});
+
+document.getElementById('btn-export-sql-csv').addEventListener('click', () => {
+    if (lastSqlResultData) exportRowsData(lastSqlResultData.columns, lastSqlResultData.data, 'csv', `${state.db}_query`);
+});
+document.getElementById('btn-export-sql-json').addEventListener('click', () => {
+    if (lastSqlResultData) exportRowsData(lastSqlResultData.columns, lastSqlResultData.data, 'json', `${state.db}_query`);
+});
+
+document.getElementById('btn-run-sql').addEventListener('click', runSqlQuery);
+document.getElementById('sql-input').addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        runSqlQuery();
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (!document.getElementById('cell-modal').classList.contains('hidden')) closeCellModal();
+        else if (!document.getElementById('row-modal').classList.contains('hidden')) closeAddRowModal();
+        else if (!document.getElementById('conn-modal').classList.contains('hidden')) closeModal();
+        else if (!document.getElementById('custom-confirm').classList.contains('hidden')) {
+            document.getElementById('custom-confirm').classList.add('hidden');
+            if (confirmNoCallback) confirmNoCallback();
         }
-        await saveState();
-    } catch (err) {
-        errorEl.textContent = err.message;
-        errorEl.classList.remove('hidden');
     }
 });
 
@@ -1207,7 +2043,7 @@ function initCustomSelects() {
     createCustomSelect(document.getElementById('table-select'), {
         icon: 'table',
         searchable: true,
-        searchPlaceholder: '搜索表'
+        searchPlaceholder: '搜索表或类型'
     });
     createCustomSelect(document.getElementById('sql-db-select'), {
         icon: 'db',
@@ -1228,7 +2064,13 @@ function initCustomSelects() {
 
 async function init() {
     initCustomSelects();
-    await loadConnections();
     initData = await fetchJSON('/api/init');
+    await loadConnections();
+
+    const hashState = parseUrlHash();
+    const resumeConnId = hashState.conn && connections.some(c => c.id === hashState.conn) ? hashState.conn : '';
+    if (resumeConnId) {
+        await useConnection(resumeConnId, hashState.view === 'sql' ? 'sql' : 'data');
+    }
 }
 init();

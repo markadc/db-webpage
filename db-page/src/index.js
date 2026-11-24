@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const { Client, types: pgTypes } = require('pg');
 const mysql = require('mysql2/promise');
+const Redis = require('ioredis');
 const open = require('open').default;
 
 // PostgreSQL: 保持 DATE (1082) 原样输出，TIMESTAMP WITHOUT TIME ZONE (1114) 格式化为 YYYY-MM-DD HH:mm:ss
@@ -172,7 +173,39 @@ function saveInit(data) {
     fs.writeFileSync(INIT_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
+function parseRedisDb(dbname) {
+    if (!dbname) return 0;
+    const s = String(dbname).trim();
+    if (s.startsWith('db') && /^\d+$/.test(s.slice(2))) return parseInt(s.slice(2), 10);
+    return /^\d+$/.test(s) ? parseInt(s, 10) : 0;
+}
+
+async function closeDbConnection(conn) {
+    if (!conn) return;
+    try {
+        if (typeof conn.quit === 'function') {
+            await conn.quit();
+        } else if (typeof conn.end === 'function') {
+            await conn.end();
+        }
+    } catch (_) {}
+}
+
 async function getDbConnection(conn_type, host, port, user, password, dbname) {
+    if (conn_type === 'redis') {
+        const client = new Redis({
+            host,
+            port: parseInt(port, 10),
+            username: user || undefined,
+            password: password || undefined,
+            db: parseRedisDb(dbname),
+            lazyConnect: true,
+            connectTimeout: 5000,
+            maxRetriesPerRequest: 1
+        });
+        await client.connect();
+        return client;
+    }
     if (conn_type === 'mysql') {
         return mysql.createConnection({
             host,
@@ -257,7 +290,24 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/init', (req, res) => {
-    res.json(loadInit());
+    const data = loadInit();
+    res.json({ ...data, active_conn_id: req.session.conn_id || null });
+});
+
+app.post('/api/connections/test', async (req, res) => {
+    const { conn_type = 'postgresql', host, port, user = '', password = '' } = req.body;
+    let db;
+    try {
+        db = await getDbConnection(conn_type, host, port, user, password, null);
+        if (conn_type === 'redis') {
+            await db.ping();
+        }
+        await closeDbConnection(db);
+        res.json({ success: true });
+    } catch (e) {
+        await closeDbConnection(db);
+        res.status(400).json({ detail: errMessage(e) });
+    }
 });
 
 app.get('/api/connections', (req, res) => {
@@ -323,7 +373,10 @@ app.post('/api/connections/:conn_id/use', async (req, res) => {
             conn.password,
             null
         );
-        await db.end();
+        if ((conn.type || 'postgresql') === 'redis') {
+            await db.ping();
+        }
+        await closeDbConnection(db);
     } catch (e) {
         return res.status(400).json({ detail: errMessage(e) });
     }
@@ -370,7 +423,16 @@ app.get('/api/databases', async (req, res) => {
             params.password,
             params.conn_type === 'postgresql' ? 'postgres' : null
         );
-        if (params.conn_type === 'mysql') {
+        if (params.conn_type === 'redis') {
+            let dbCount = 16;
+            try {
+                const cfg = await conn.config('GET', 'databases');
+                if (Array.isArray(cfg) && cfg.length >= 2) {
+                    dbCount = Math.max(1, parseInt(cfg[1], 10) || 16);
+                }
+            } catch (_) {}
+            res.json({ databases: Array.from({ length: dbCount }, (_, i) => `db${i}`) });
+        } else if (params.conn_type === 'mysql') {
             const [rows] = await conn.query('SHOW DATABASES');
             const exclude = new Set(['information_schema', 'mysql', 'performance_schema', 'sys']);
             const databases = rows
@@ -386,15 +448,16 @@ app.get('/api/databases', async (req, res) => {
     } catch (e) {
         res.status(400).json({ detail: errMessage(e) });
     } finally {
-        if (conn) {
-            try { await conn.end(); } catch (_) {}
-        }
+        await closeDbConnection(conn);
     }
 });
 
 app.get('/api/tables', async (req, res) => {
     const { db } = req.query;
     const params = getConnParams(req);
+    if (params.conn_type === 'redis') {
+        return res.json({ tables: ['ALL', 'string', 'hash', 'list', 'set', 'zset'] });
+    }
     let conn;
     try {
         conn = await getDbConnection(params.conn_type, params.host, params.port, params.user, params.password, db);
@@ -410,22 +473,102 @@ app.get('/api/tables', async (req, res) => {
     } catch (e) {
         res.status(400).json({ detail: errMessage(e) });
     } finally {
-        if (conn) {
-            try { await conn.end(); } catch (_) {}
-        }
+        await closeDbConnection(conn);
     }
 });
 
-async function getTableColumns(conn, conn_type, table) {
+async function getTableColumnTypes(conn, conn_type, table) {
     if (conn_type === 'mysql') {
         const [desc] = await conn.query(`DESCRIBE ${quoteIdentifier('mysql', table)}`);
-        return desc.map(d => d.Field);
+        const out = {};
+        for (const d of desc) {
+            if (d.Field) out[d.Field] = String(d.Type || '').toLowerCase();
+        }
+        return out;
     }
     const descResult = await conn.query(
-        `SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public' ORDER BY ordinal_position`,
+        `SELECT column_name, udt_name, character_maximum_length FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public' ORDER BY ordinal_position`,
         [table]
     );
-    return descResult.rows.map(r => r.column_name);
+    const out = {};
+    for (const r of descResult.rows) {
+        let t = r.udt_name || '';
+        if ((t === 'varchar' || t === 'bpchar') && r.character_maximum_length) {
+            t = `varchar(${r.character_maximum_length})`;
+        }
+        out[r.column_name] = t;
+    }
+    return out;
+}
+
+async function getTableColumns(conn, conn_type, table) {
+    const types = await getTableColumnTypes(conn, conn_type, table);
+    return Object.keys(types);
+}
+
+async function redisReadValue(conn, key, keyType) {
+    if (keyType === 'string') return await conn.get(key);
+    if (keyType === 'hash') return JSON.stringify(await conn.hgetall(key));
+    if (keyType === 'list') return JSON.stringify(await conn.lrange(key, 0, 99));
+    if (keyType === 'set') return JSON.stringify(await conn.smembers(key));
+    if (keyType === 'zset') {
+        const raw = await conn.zrange(key, 0, 99, 'WITHSCORES');
+        const pairs = [];
+        for (let i = 0; i < raw.length; i += 2) {
+            pairs.push([raw[i], Number(raw[i + 1])]);
+        }
+        return JSON.stringify(pairs);
+    }
+    return `<${keyType}>`;
+}
+
+function matchRedisFilter(row, filterCol, filterOp, filterVal) {
+    if (!filterCol) return true;
+    const val = row[filterCol];
+    const op = String(filterOp || 'contains').toLowerCase();
+    if (op === 'isnull') return val === null || val === undefined || val === '';
+    if (op === 'notnull') return val !== null && val !== undefined && val !== '';
+    if (filterVal === undefined || filterVal === '') return true;
+    const sVal = val === null || val === undefined ? '' : String(val);
+    if (op === 'eq') return sVal === filterVal;
+    if (op === 'neq') return sVal !== filterVal;
+    if (op === 'gt' || op === 'lt') {
+        const a = Number(sVal), b = Number(filterVal);
+        if (!Number.isNaN(a) && !Number.isNaN(b)) {
+            return op === 'gt' ? a > b : a < b;
+        }
+        return op === 'gt' ? sVal > filterVal : sVal < filterVal;
+    }
+    return sVal.toLowerCase().includes(String(filterVal).toLowerCase());
+}
+
+function parseRedisCommand(input) {
+    const tokens = [];
+    let current = '';
+    let quote = null;
+    let escaped = false;
+    for (const ch of String(input || '').trim()) {
+        if (escaped) {
+            current += ch;
+            escaped = false;
+        } else if (ch === '\\') {
+            escaped = true;
+        } else if (quote) {
+            if (ch === quote) quote = null;
+            else current += ch;
+        } else if (ch === '"' || ch === "'") {
+            quote = ch;
+        } else if (/\s/.test(ch)) {
+            if (current) {
+                tokens.push(current);
+                current = '';
+            }
+        } else {
+            current += ch;
+        }
+    }
+    if (current) tokens.push(current);
+    return tokens;
 }
 
 app.get('/api/data', async (req, res) => {
@@ -434,9 +577,81 @@ app.get('/api/data', async (req, res) => {
     let conn;
     try {
         conn = await getDbConnection(params.conn_type, params.host, params.port, params.user, params.password, db);
-        const q = quoteIdentifier(params.conn_type, table);
         const limit = parseInt(size, 10);
-        const offset = (parseInt(page, 10) - 1) * limit;
+        const pageNum = parseInt(page, 10);
+
+        if (params.conn_type === 'redis') {
+            const columns = ['key', 'type', 'ttl', 'value'];
+            if (filter_col && !columns.includes(filter_col)) {
+                return res.status(400).json({ detail: '无效的筛选字段' });
+            }
+            if (sort_col && !columns.includes(sort_col)) {
+                return res.status(400).json({ detail: '无效的排序字段' });
+            }
+            const keys = [];
+            let cursor = '0';
+            do {
+                const [nextCursor, batch] = await conn.scan(cursor, 'COUNT', 500);
+                cursor = nextCursor;
+                for (const k of batch) {
+                    keys.push(k);
+                    if (keys.length >= 2000) break;
+                }
+            } while (cursor !== '0' && keys.length < 2000);
+            keys.sort();
+
+            const pipe = conn.pipeline();
+            for (const k of keys) {
+                pipe.type(k);
+                pipe.ttl(k);
+            }
+            const meta = keys.length ? await pipe.exec() : [];
+            const targetType = table && table !== 'ALL' ? table : null;
+            const rows = [];
+            for (let i = 0; i < keys.length; i++) {
+                const k = keys[i];
+                const kType = meta[i * 2][1];
+                const kTtl = meta[i * 2 + 1][1];
+                if (targetType && kType !== targetType) continue;
+                const kVal = await redisReadValue(conn, k, kType);
+                const row = { key: k, type: kType, ttl: kTtl, value: kVal };
+                if (matchRedisFilter(row, filter_col, filter_op, filter_val)) {
+                    rows.push(row);
+                }
+            }
+
+            let activeSortCol = null;
+            let activeSortDir = null;
+            if (sort_col) {
+                activeSortCol = sort_col;
+                activeSortDir = String(sort_dir || '').toLowerCase() === 'desc' ? 'desc' : 'asc';
+                const mult = activeSortDir === 'desc' ? -1 : 1;
+                rows.sort((a, b) => {
+                    if (sort_col === 'ttl') return (Number(a.ttl) - Number(b.ttl)) * mult;
+                    const sa = a[sort_col] == null ? '' : String(a[sort_col]);
+                    const sb = b[sort_col] == null ? '' : String(b[sort_col]);
+                    return sa.localeCompare(sb) * mult;
+                });
+            }
+
+            const total = rows.length;
+            const offset = (pageNum - 1) * limit;
+            return res.json({
+                columns,
+                column_types: { key: 'key', type: 'type', ttl: 'seconds', value: 'value' },
+                data: rows.slice(offset, offset + limit),
+                total,
+                page: pageNum,
+                size: limit,
+                pages: Math.ceil(total / limit),
+                pk: 'key',
+                sort_col: activeSortCol,
+                sort_dir: activeSortDir
+            });
+        }
+
+        const q = quoteIdentifier(params.conn_type, table);
+        const offset = (pageNum - 1) * limit;
 
         let validCols = null;
         let whereClauseMysql = '';
@@ -492,15 +707,12 @@ app.get('/api/data', async (req, res) => {
                 `SELECT * FROM ${q}${whereClauseMysql}${orderClause} LIMIT ? OFFSET ?`,
                 [...whereParams, limit, offset]
             );
-            let columns = [];
-            if (rows.length > 0) {
-                columns = Object.keys(rows[0]);
-            } else {
-                columns = validCols || await getTableColumns(conn, 'mysql', table);
-            }
+            const colTypes = await getTableColumnTypes(conn, 'mysql', table);
+            const columns = rows.length > 0 ? Object.keys(rows[0]) : Object.keys(colTypes);
             const pk = await getPkColumn(conn, 'mysql', table);
             res.json({
                 columns,
+                column_types: colTypes,
                 data: normalizeRows(rows),
                 total,
                 page: parseInt(page, 10),
@@ -519,15 +731,12 @@ app.get('/api/data', async (req, res) => {
                 `SELECT * FROM ${q}${whereClausePg}${orderClause} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
                 [...whereParams, limit, offset]
             );
-            let columns = [];
-            if (result.rows.length > 0) {
-                columns = Object.keys(result.rows[0]);
-            } else {
-                columns = validCols || await getTableColumns(conn, 'postgresql', table);
-            }
+            const colTypes = await getTableColumnTypes(conn, 'postgresql', table);
+            const columns = result.rows.length > 0 ? Object.keys(result.rows[0]) : Object.keys(colTypes);
             const pk = await getPkColumn(conn, 'postgresql', table);
             res.json({
                 columns,
+                column_types: colTypes,
                 data: normalizeRows(result.rows),
                 total,
                 page: parseInt(page, 10),
@@ -541,41 +750,202 @@ app.get('/api/data', async (req, res) => {
     } catch (e) {
         res.status(400).json({ detail: errMessage(e) });
     } finally {
-        if (conn) {
-            try { await conn.end(); } catch (_) {}
+        await closeDbConnection(conn);
+    }
+});
+
+app.post('/api/data', async (req, res) => {
+    const { db, table, row_json } = req.body;
+    const params = getConnParams(req);
+    let conn;
+    try {
+        const payload = JSON.parse(row_json || '{}');
+        conn = await getDbConnection(params.conn_type, params.host, params.port, params.user, params.password, db);
+
+        if (params.conn_type === 'redis') {
+            const k = String(payload.key || '').trim();
+            if (!k) return res.status(400).json({ detail: 'Key 不能为空' });
+            const kType = String(payload.type || 'string').toLowerCase();
+            const ttl = parseInt(payload.ttl ?? -1, 10);
+            const val = payload.value ?? '';
+
+            if (kType === 'string') {
+                await conn.set(k, val === null ? '' : String(val));
+            } else {
+                const parsed = typeof val === 'string' ? JSON.parse(val) : val;
+                await conn.del(k);
+                if (kType === 'hash' && parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
+                    if (!Object.keys(parsed).length) return res.status(400).json({ detail: 'Hash 内容不能为空对象' });
+                    await conn.hset(k, parsed);
+                } else if (kType === 'list' && Array.isArray(parsed)) {
+                    if (!parsed.length) return res.status(400).json({ detail: 'List 内容不能为空数组' });
+                    await conn.rpush(k, ...parsed.map(String));
+                } else if (kType === 'set' && Array.isArray(parsed)) {
+                    if (!parsed.length) return res.status(400).json({ detail: 'Set 内容不能为空数组' });
+                    await conn.sadd(k, ...parsed.map(String));
+                } else if (kType === 'zset' && Array.isArray(parsed)) {
+                    const args = [];
+                    for (const item of parsed) args.push(Number(item[1]), String(item[0]));
+                    if (!args.length) return res.status(400).json({ detail: 'ZSet 内容不能为空数组' });
+                    await conn.zadd(k, ...args);
+                } else {
+                    return res.status(400).json({ detail: '值格式与所选 Redis 类型不匹配' });
+                }
+            }
+            if (!Number.isNaN(ttl) && ttl > 0) {
+                await conn.expire(k, ttl);
+            }
+            return res.json({ success: true, rowcount: 1 });
         }
+
+        const validCols = await getTableColumns(conn, params.conn_type, table);
+        const qTable = quoteIdentifier(params.conn_type, table);
+        const cols = [];
+        const vals = [];
+        for (const [colName, colVal] of Object.entries(payload)) {
+            if (!validCols.includes(colName)) {
+                return res.status(400).json({ detail: `无效的字段: ${colName}` });
+            }
+            cols.push(quoteIdentifier(params.conn_type, colName));
+            vals.push(colVal);
+        }
+
+        if (params.conn_type === 'mysql') {
+            if (!cols.length) {
+                const [result] = await conn.query(`INSERT INTO ${qTable} () VALUES ()`);
+                res.json({ success: true, rowcount: result.affectedRows });
+            } else {
+                const placeholders = cols.map(() => '?').join(', ');
+                const [result] = await conn.query(`INSERT INTO ${qTable} (${cols.join(', ')}) VALUES (${placeholders})`, vals);
+                res.json({ success: true, rowcount: result.affectedRows });
+            }
+        } else {
+            if (!cols.length) {
+                const result = await conn.query(`INSERT INTO ${qTable} DEFAULT VALUES`);
+                res.json({ success: true, rowcount: result.rowCount });
+            } else {
+                const placeholders = cols.map((_, idx) => `$${idx + 1}`).join(', ');
+                const result = await conn.query(`INSERT INTO ${qTable} (${cols.join(', ')}) VALUES (${placeholders})`, vals);
+                res.json({ success: true, rowcount: result.rowCount });
+            }
+        }
+    } catch (e) {
+        res.status(400).json({ detail: errMessage(e) });
+    } finally {
+        await closeDbConnection(conn);
     }
 });
 
 app.put('/api/data', async (req, res) => {
-    const { db, table, pk_col, pk_val, column, value } = req.body;
+    const { db, table, pk_col, pk_val, column, value = '', is_null = '0' } = req.body;
     const params = getConnParams(req);
+    const setNull = String(is_null) === '1';
     let conn;
     try {
         conn = await getDbConnection(params.conn_type, params.host, params.port, params.user, params.password, db);
+        if (params.conn_type === 'redis') {
+            if (setNull) {
+                if (column === 'ttl') {
+                    await conn.persist(pk_val);
+                    return res.json({ success: true, rowcount: 1 });
+                }
+                return res.status(400).json({ detail: 'Redis 值不支持设为 NULL，如需删除请使用删除行' });
+            }
+            if (column === 'key') {
+                await conn.rename(pk_val, value);
+                return res.json({ success: true, rowcount: 1 });
+            }
+            if (column === 'ttl') {
+                const sec = parseInt(value, 10);
+                if (Number.isNaN(sec)) return res.status(400).json({ detail: 'TTL 必须是整数' });
+                if (sec < 0) await conn.persist(pk_val);
+                else await conn.expire(pk_val, sec);
+                return res.json({ success: true, rowcount: 1 });
+            }
+            if (column === 'value') {
+                const kType = await conn.type(pk_val);
+                const ttl = await conn.ttl(pk_val);
+                if (kType === 'string') {
+                    if (ttl > 0) await conn.set(pk_val, value, 'EX', ttl);
+                    else await conn.set(pk_val, value);
+                    return res.json({ success: true, rowcount: 1 });
+                }
+                const parsed = JSON.parse(value);
+                await conn.del(pk_val);
+                if (kType === 'hash' && parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
+                    if (Object.keys(parsed).length) await conn.hset(pk_val, parsed);
+                } else if (kType === 'list' && Array.isArray(parsed)) {
+                    if (parsed.length) await conn.rpush(pk_val, ...parsed.map(String));
+                } else if (kType === 'set' && Array.isArray(parsed)) {
+                    if (parsed.length) await conn.sadd(pk_val, ...parsed.map(String));
+                } else if (kType === 'zset' && Array.isArray(parsed)) {
+                    const args = [];
+                    for (const item of parsed) {
+                        args.push(Number(item[1]), String(item[0]));
+                    }
+                    if (args.length) await conn.zadd(pk_val, ...args);
+                } else {
+                    return res.status(400).json({ detail: `不支持更新类型为 ${kType} 的值` });
+                }
+                if (ttl > 0) await conn.expire(pk_val, ttl);
+                return res.json({ success: true, rowcount: 1 });
+            }
+            return res.status(400).json({ detail: 'Redis 仅支持修改 key、ttl 或 value' });
+        }
+
+        const validCols = await getTableColumns(conn, params.conn_type, table);
+        if (!validCols.includes(column) || !validCols.includes(pk_col)) {
+            return res.status(400).json({ detail: '无效的字段名' });
+        }
         const q_table = quoteIdentifier(params.conn_type, table);
         const q_col = quoteIdentifier(params.conn_type, column);
         const q_pk_col = quoteIdentifier(params.conn_type, pk_col);
 
         if (params.conn_type === 'mysql') {
-            const [result] = await conn.query(
-                `UPDATE ${q_table} SET ${q_col} = ? WHERE ${q_pk_col} = ?`,
-                [value, pk_val]
-            );
+            const [result] = setNull
+                ? await conn.query(`UPDATE ${q_table} SET ${q_col} = NULL WHERE ${q_pk_col} = ?`, [pk_val])
+                : await conn.query(`UPDATE ${q_table} SET ${q_col} = ? WHERE ${q_pk_col} = ?`, [value, pk_val]);
             res.json({ success: true, rowcount: result.affectedRows });
         } else {
-            const result = await conn.query(
-                `UPDATE ${q_table} SET ${q_col} = $1 WHERE ${q_pk_col} = $2`,
-                [value, pk_val]
-            );
+            const result = setNull
+                ? await conn.query(`UPDATE ${q_table} SET ${q_col} = NULL WHERE ${q_pk_col} = $1`, [pk_val])
+                : await conn.query(`UPDATE ${q_table} SET ${q_col} = $1 WHERE ${q_pk_col} = $2`, [value, pk_val]);
             res.json({ success: true, rowcount: result.rowCount });
         }
     } catch (e) {
         res.status(400).json({ detail: errMessage(e) });
     } finally {
-        if (conn) {
-            try { await conn.end(); } catch (_) {}
+        await closeDbConnection(conn);
+    }
+});
+
+app.delete('/api/data', async (req, res) => {
+    const { db, table, pk_col, pk_val } = req.query;
+    const params = getConnParams(req);
+    let conn;
+    try {
+        conn = await getDbConnection(params.conn_type, params.host, params.port, params.user, params.password, db);
+        if (params.conn_type === 'redis') {
+            const deleted = await conn.del(pk_val);
+            return res.json({ success: true, rowcount: deleted });
         }
+        const validCols = await getTableColumns(conn, params.conn_type, table);
+        if (!validCols.includes(pk_col)) {
+            return res.status(400).json({ detail: '无效的主键字段' });
+        }
+        const q_table = quoteIdentifier(params.conn_type, table);
+        const q_pk_col = quoteIdentifier(params.conn_type, pk_col);
+        if (params.conn_type === 'mysql') {
+            const [result] = await conn.query(`DELETE FROM ${q_table} WHERE ${q_pk_col} = ?`, [pk_val]);
+            res.json({ success: true, rowcount: result.affectedRows });
+        } else {
+            const result = await conn.query(`DELETE FROM ${q_table} WHERE ${q_pk_col} = $1`, [pk_val]);
+            res.json({ success: true, rowcount: result.rowCount });
+        }
+    } catch (e) {
+        res.status(400).json({ detail: errMessage(e) });
+    } finally {
+        await closeDbConnection(conn);
     }
 });
 
@@ -585,6 +955,31 @@ app.post('/api/query', async (req, res) => {
     let conn;
     try {
         conn = await getDbConnection(params.conn_type, params.host, params.port, params.user, params.password, db);
+
+        if (params.conn_type === 'redis') {
+            const parts = parseRedisCommand(sqlStr);
+            if (!parts.length) {
+                return res.status(400).json({ detail: '请输入 Redis 命令' });
+            }
+            const [cmd, ...args] = parts;
+            const result = await conn.call(cmd, ...args);
+            if (Array.isArray(result)) {
+                const rows = result.map((v, i) => ({
+                    index: i,
+                    value: v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v))
+                }));
+                return res.json({ columns: ['index', 'value'], data: rows, rowcount: rows.length });
+            }
+            if (result && typeof result === 'object') {
+                const rows = Object.entries(result).map(([k, v]) => ({ field: String(k), value: String(v) }));
+                return res.json({ columns: ['field', 'value'], data: rows, rowcount: rows.length });
+            }
+            return res.json({
+                columns: ['result'],
+                data: [{ result: result === null || result === undefined ? '' : String(result) }],
+                rowcount: 1
+            });
+        }
 
         if (params.conn_type === 'mysql') {
             const hasResult = !/^(\s*INSERT\s+|\s*UPDATE\s+|\s*DELETE\s+|\s*CREATE\s+|\s*DROP\s+|\s*ALTER\s+|\s*TRUNCATE\s+)/i.test(sqlStr);
@@ -608,9 +1003,7 @@ app.post('/api/query', async (req, res) => {
     } catch (e) {
         res.status(400).json({ detail: errMessage(e) });
     } finally {
-        if (conn) {
-            try { await conn.end(); } catch (_) {}
-        }
+        await closeDbConnection(conn);
     }
 });
 

@@ -9,20 +9,21 @@
   <a href="#"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
   <a href="#"><img src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
   <a href="#"><img src="https://img.shields.io/badge/MySQL-4479A1?logo=mysql&logoColor=white" alt="MySQL"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white" alt="Redis"></a>
 </p>
 
-> 一个基于 FastAPI 的轻量级数据库数据可视化工具，支持 PostgreSQL 🐘 和 MySQL 🐬。通过 Web 界面管理数据库连接、浏览表数据、执行 SQL 查询，无需登录，开箱即用。
+> 一个轻量级数据库数据可视化工作台，支持 PostgreSQL、MySQL 和 Redis。通过 Web 界面管理数据库连接、浏览与增删改导表数据、执行 SQL 查询与 Redis 命令，无需登录，开箱即用。
 
 ---
 
 ## ✨ 功能特性
 
-- 🔌 **连接管理** — 卡片式展示数据库连接，支持新增、编辑、删除
-- 🗄️ **多数据库支持** — 同时支持 PostgreSQL 和 MySQL
-- 📊 **数据浏览** — 选择数据库和表后分页展示数据，支持调整每页条数
-- 📝 **SQL 执行** — 独立的 SQL 查询页面，支持执行任意 SQL 并查看结果
-- 💾 **状态持久化** — 每个连接独立保存上次浏览的数据库、表和 SQL 历史，刷新页面后自动恢复
-- 🎨 **蓝色主题** — 简洁现代的 UI 设计
+- 🔌 **连接管理** — 品牌分色卡片展示与类型筛选，支持新建、编辑、测试连通性、删除及顶栏快速切换
+- 🗄️ **多数据库支持** — 同时支持 PostgreSQL、MySQL 与 Redis
+- 📊 **数据浏览与增删改导** — 分页、字段排序、条件筛选、列宽拖拽/平分、内联与多行 JSON/NULL 编辑、新增/删除记录、导出 CSV/JSON
+- 📝 **SQL / Redis 命令终端** — 支持 `Cmd/Ctrl + Enter` 快捷运行（支持框选部分执行）与命令历史回溯
+- 💾 **状态持久化** — 每个连接独立保存上次浏览的库、表和历史，刷新页面自动保持当前视图
+- 🎨 **高辨识度工作台 UI** — 经典蓝白视觉搭配各数据库专属品牌色标
 
 ---
 
@@ -30,10 +31,11 @@
 
 | 层级            | 技术                         |
 | --------------- | ---------------------------- |
-| 后端            | Python + FastAPI             |
+| 后端            | Python + FastAPI / Node.js + Express |
 | 前端            | 原生 HTML + CSS + JavaScript |
-| PostgreSQL 驱动 | `psycopg2`                   |
-| MySQL 驱动      | `pymysql`                    |
+| PostgreSQL 驱动 | `psycopg2` / `pg`            |
+| MySQL 驱动      | `pymysql` / `mysql2`         |
+| Redis 驱动      | `redis` / `ioredis`          |
 
 ---
 

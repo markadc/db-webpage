@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DBPage</title>
     <link rel="icon" type="image/png" href="/static/database.png">
-    <link rel="stylesheet" href="/static/css/style.css?v=8">
+    <link rel="stylesheet" href="/static/css/style.css?v=10">
 </head>
 
 <body>
@@ -21,12 +21,38 @@
             </span>
             <span class="brand-name">DBPage</span>
         </div>
+
+        <!-- 顶栏当前连接指示与快速切换 -->
+        <div id="header-conn-switcher" class="custom-select header-switcher hidden">
+            <button type="button" id="header-conn-trigger" class="custom-select-trigger">
+                <span class="custom-select-value-wrap">
+                    <span class="conn-live-dot" aria-hidden="true"></span>
+                    <span id="header-conn-name" class="custom-select-label">当前连接</span>
+                    <span id="header-conn-type" class="card-type-tag">PG</span>
+                </span>
+                <span class="custom-select-chevron">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </span>
+            </button>
+            <div class="custom-select-menu header-switcher-menu">
+                <div id="header-conn-list" class="custom-select-options"></div>
+            </div>
+        </div>
     </header>
+
     <main>
         <!-- 连接卡片页面 -->
         <div id="connections-view">
             <div class="view-header">
-                <h2>数据库连接</h2>
+                <div class="conn-header-left">
+                    <h2>数据库连接</h2>
+                    <div id="conn-filter-tabs" class="conn-filter-tabs">
+                        <button type="button" class="conn-tab active" data-type="all">全部</button>
+                        <button type="button" class="conn-tab" data-type="postgresql">PostgreSQL</button>
+                        <button type="button" class="conn-tab" data-type="mysql">MySQL</button>
+                        <button type="button" class="conn-tab" data-type="redis">Redis</button>
+                    </div>
+                </div>
                 <button id="btn-add-conn" class="btn-primary">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
                     <span>新建连接</span>
@@ -43,17 +69,21 @@
                     <span>连接列表</span>
                 </button>
                 <div class="toolbar-inline">
-                    <button id="btn-new-query" class="btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
-                        <span>SQL 查询</span>
-                    </button>
+                    <!-- 分组 1：数据源定位 -->
                     <select id="db-select">
                         <option value="">选择数据库</option>
                     </select>
                     <select id="table-select">
                         <option value="">选择表</option>
                     </select>
-                    <!-- 字段显示筛选下拉 -->
+                    <button type="button" id="btn-refresh-data" class="btn-secondary hidden" title="刷新当前数据">
+                        <svg id="icon-refresh" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                        <span>刷新</span>
+                    </button>
+
+                    <span id="toolbar-div-1" class="toolbar-divider hidden" aria-hidden="true"></span>
+
+                    <!-- 分组 2：视图与筛选控制 -->
                     <div id="col-picker" class="custom-select col-picker hidden">
                         <button type="button" id="col-picker-trigger" class="custom-select-trigger">
                             <span class="custom-select-value-wrap">
@@ -89,8 +119,33 @@
                         <span>筛选</span>
                         <span id="filter-badge" class="filter-badge hidden"></span>
                     </button>
+
+                    <span id="toolbar-div-2" class="toolbar-divider" aria-hidden="true"></span>
+
+                    <!-- 分组 3：数据操作与终端 -->
+                    <button type="button" id="btn-add-row" class="btn-primary hidden">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                        <span id="label-add-row">新增记录</span>
+                    </button>
+                    <button id="btn-new-query" class="btn-secondary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                        <span id="label-new-query">SQL 查询</span>
+                    </button>
+                    <div id="export-picker" class="custom-select export-picker hidden">
+                        <button type="button" id="export-picker-trigger" class="btn-secondary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                            <span>导出</span>
+                        </button>
+                        <div class="custom-select-menu export-picker-menu">
+                            <div class="custom-select-options">
+                                <div class="custom-select-option" data-format="csv"><span class="custom-select-option-text">导出当前页 CSV</span></div>
+                                <div class="custom-select-option" data-format="json"><span class="custom-select-option-text">导出当前页 JSON</span></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+
             <!-- 按字段条件筛选栏 -->
             <div id="filter-bar" class="filter-bar hidden">
                 <span class="filter-bar-label">筛选条件</span>
@@ -110,17 +165,22 @@
                 <button type="button" id="btn-apply-filter" class="btn-primary">查询</button>
                 <button type="button" id="btn-clear-filter" class="btn-secondary">重置</button>
             </div>
-            <div class="table-wrap">
+
+            <div id="table-wrap" class="table-wrap">
                 <table id="data-table">
                     <thead></thead>
                     <tbody></tbody>
                 </table>
             </div>
+
             <div class="pagination hidden" id="pagination">
-                <div class="page-info">
-                    第 <span id="page-num">1</span> / <span id="page-total">1</span> 页
-                    <span class="page-info-sep">·</span>
-                    共 <span id="row-total">0</span> 条
+                <div class="page-info-group">
+                    <div class="page-info">
+                        第 <span id="page-num">1</span> / <span id="page-total">1</span> 页
+                        <span class="page-info-sep">·</span>
+                        共 <span id="row-total">0</span> 条
+                    </div>
+                    <span class="interaction-hint">单击复制 · 双击编辑 · 悬停右侧展开详情</span>
                 </div>
                 <div class="page-pills" id="page-pills">
                     <button type="button" id="btn-first" aria-label="首页">
@@ -161,7 +221,7 @@
             </div>
         </div>
 
-        <!-- SQL 查询页面 -->
+        <!-- SQL / 命令查询页面 -->
         <div id="sql-view" class="hidden">
             <div class="view-header">
                 <button id="btn-back-data" class="btn-secondary">
@@ -176,20 +236,72 @@
             </div>
             <div class="sql-panel">
                 <div class="sql-toolbar">
-                    <label for="sql-input">SQL 编辑器</label>
-                    <button id="btn-run-sql" class="btn-primary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                        <span>执行</span>
-                    </button>
+                    <div class="sql-toolbar-left">
+                        <label id="sql-editor-label" for="sql-input">SQL 编辑器</label>
+                        <span class="kbd-hint">⌘/Ctrl + Enter 运行</span>
+                    </div>
+                    <div class="sql-toolbar-right">
+                        <div id="history-picker" class="custom-select history-picker">
+                            <button type="button" id="history-picker-trigger" class="btn-secondary btn-sm">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+                                <span>历史记录</span>
+                            </button>
+                            <div class="custom-select-menu history-picker-menu">
+                                <div id="history-list" class="custom-select-options"></div>
+                            </div>
+                        </div>
+                        <button type="button" id="btn-export-sql-csv" class="btn-secondary btn-sm hidden">导出 CSV</button>
+                        <button type="button" id="btn-export-sql-json" class="btn-secondary btn-sm hidden">导出 JSON</button>
+                        <button id="btn-run-sql" class="btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                            <span>执行</span>
+                        </button>
+                    </div>
                 </div>
                 <textarea id="sql-input" placeholder="SELECT * FROM table_name LIMIT 10" spellcheck="false"></textarea>
                 <div id="sql-error" class="sql-error hidden"></div>
             </div>
-            <div class="table-wrap">
+            <div id="sql-table-wrap" class="table-wrap">
                 <table id="sql-result-table">
                     <thead></thead>
                     <tbody></tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- 单元格详情 / 多行 JSON 编辑弹窗 -->
+        <div id="cell-modal" class="modal hidden">
+            <div class="modal-content modal-content-lg">
+                <div class="modal-header-row">
+                    <div>
+                        <h3 id="cell-modal-title">编辑字段</h3>
+                        <p id="cell-modal-meta" class="modal-submeta"></p>
+                    </div>
+                    <div class="modal-header-tools">
+                        <button type="button" id="btn-cell-format-json" class="btn-secondary btn-sm">格式化 JSON</button>
+                        <button type="button" id="btn-cell-copy" class="btn-secondary btn-sm">复制内容</button>
+                    </div>
+                </div>
+                <textarea id="cell-modal-textarea" class="cell-modal-textarea" spellcheck="false"></textarea>
+                <div class="modal-actions modal-actions-split">
+                    <button type="button" id="btn-cell-set-null" class="btn-secondary">设为 NULL</button>
+                    <div class="modal-actions-right">
+                        <button type="button" id="btn-cell-cancel" class="btn-secondary">取消</button>
+                        <button type="button" id="btn-cell-save" class="btn-primary">保存修改</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 新增记录 / 新增 Key 弹窗 -->
+        <div id="row-modal" class="modal hidden">
+            <div class="modal-content modal-content-lg">
+                <h3 id="row-modal-title">新增记录</h3>
+                <div id="row-modal-fields" class="row-modal-fields"></div>
+                <div class="modal-actions">
+                    <button type="button" id="btn-save-row" class="btn-primary">保存</button>
+                    <button type="button" id="btn-cancel-row" class="btn-secondary">取消</button>
+                </div>
             </div>
         </div>
 
@@ -199,7 +311,7 @@
                 <h3 id="confirm-title">提示</h3>
                 <p id="confirm-message" class="confirm-message"></p>
                 <div class="modal-actions">
-                    <button id="btn-confirm-yes" class="btn-primary">保存</button>
+                    <button id="btn-confirm-yes" class="btn-primary">确定</button>
                     <button id="btn-confirm-no" class="btn-secondary">取消</button>
                     <button id="btn-confirm-ok" class="btn-primary hidden">确定</button>
                 </div>
@@ -220,6 +332,7 @@
                     <select id="modal-type">
                         <option value="postgresql">PostgreSQL</option>
                         <option value="mysql">MySQL</option>
+                        <option value="redis">Redis</option>
                     </select>
                 </div>
                 <div class="field">
@@ -231,22 +344,24 @@
                     <input type="number" id="modal-port" placeholder="5432">
                 </div>
                 <div class="field">
-                    <label for="modal-user">用户名</label>
+                    <label for="modal-user">用户名 <span id="modal-user-hint" class="field-hint hidden">(ACL 用户名，可留空)</span></label>
                     <input type="text" id="modal-user" placeholder="postgres">
                 </div>
                 <div class="field">
-                    <label for="modal-password">密码</label>
+                    <label for="modal-password">密码 <span id="modal-pwd-hint" class="field-hint hidden">(无密码可留空)</span></label>
                     <input type="password" id="modal-password" placeholder="密码">
                 </div>
+                <div id="modal-test-result" class="modal-test-result hidden"></div>
                 <div class="modal-actions">
-                    <button id="btn-save-conn" class="btn-primary">保存</button>
-                    <button id="btn-cancel-conn" class="btn-secondary">取消</button>
+                    <button type="button" id="btn-test-conn" class="btn-secondary">测试连接</button>
+                    <button type="button" id="btn-cancel-conn" class="btn-secondary">取消</button>
+                    <button type="button" id="btn-save-conn" class="btn-primary">保存</button>
                 </div>
             </div>
         </div>
     </main>
     <div id="toast" class="toast hidden">已复制</div>
-    <script src="/static/js/app.js?v=17"></script>
+    <script src="/static/js/app.js?v=20"></script>
 </body>
 
 </html>
