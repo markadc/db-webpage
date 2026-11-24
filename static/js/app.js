@@ -76,7 +76,7 @@ function closeAllCustomSelects(except = null) {
     customSelectInstances.forEach(inst => {
         if (inst !== except) inst.close();
     });
-    ['col-picker', 'export-picker', 'history-picker', 'header-conn-switcher', 'view-opts-picker'].forEach(id => {
+    ['col-picker', 'export-picker', 'history-picker', 'p2-conn-switcher', 'p3-conn-switcher', 'view-opts-picker'].forEach(id => {
         const el = document.getElementById(id);
         if (el && except !== el) el.classList.remove('open');
     });
@@ -399,43 +399,109 @@ function parseUrlHash() {
     };
 }
 
-/* ===== 顶栏当前连接切换器 ===== */
-function updateHeaderConnSwitcher() {
-    const switcher = document.getElementById('header-conn-switcher');
-    if (!switcher) return;
-    if (!currentConnId || currentView === 'connections') {
-        switcher.classList.add('hidden');
-        return;
-    }
-    const conn = connections.find(c => c.id === currentConnId);
-    if (!conn) {
-        switcher.classList.add('hidden');
-        return;
-    }
-    document.getElementById('header-conn-name').textContent = conn.name;
-    const typeEl = document.getElementById('header-conn-type');
-    typeEl.textContent = connTypeShort(conn.type);
-    typeEl.className = `card-type-tag ${connTypeClass(conn.type)}`;
-    switcher.classList.remove('hidden');
-
-    const listEl = document.getElementById('header-conn-list');
-    listEl.innerHTML = '';
-    connections.forEach(c => {
-        const item = document.createElement('div');
-        item.className = 'custom-select-option' + (c.id === currentConnId ? ' selected' : '');
-        item.innerHTML = `
-            <span class="custom-select-option-text">${escapeHtml(c.name)} <span class="card-type-tag ${connTypeClass(c.type)}" style="margin-left:4px;font-size:10.5px;padding:1px 6px;">${connTypeShort(c.type)}</span></span>
-            <span class="custom-select-check">${SELECT_ICONS.check}</span>
-        `;
-        item.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            switcher.classList.remove('open');
-            if (c.id !== currentConnId) {
-                await useConnection(c.id, 'data');
-            }
-        });
-        listEl.appendChild(item);
+/* ===== 顶栏三页导航 & P2/P3 显眼连接胶囊 ===== */
+function updateTopNav() {
+    const sep = document.getElementById('header-nav-sep');
+    const nav = document.getElementById('top-nav');
+    const hasConn = Boolean(currentConnId);
+    if (sep) sep.classList.toggle('hidden', !hasConn);
+    if (nav) nav.classList.toggle('hidden', !hasConn);
+    document.querySelectorAll('#top-nav .top-nav-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === currentView);
     });
+}
+
+function updateActiveConnBadges() {
+    updateTopNav();
+    const conn = connections.find(c => c.id === currentConnId);
+    if (!conn) return;
+
+    const typeCls = connTypeClass(conn.type);
+    const typeShort = connTypeShort(conn.type);
+    const remarkText = (conn.remark || '').trim();
+    const fallbackAddr = `${conn.host}:${conn.port}`;
+
+    ['p2', 'p3'].forEach(prefix => {
+        const switcher = document.getElementById(`${prefix}-conn-switcher`);
+        const nameEl = document.getElementById(`${prefix}-conn-name`);
+        const typeEl = document.getElementById(`${prefix}-conn-type`);
+        const remarkEl = document.getElementById(`${prefix}-conn-remark`);
+        const listEl = document.getElementById(`${prefix}-conn-list`);
+        if (!switcher || !nameEl || !typeEl || !listEl) return;
+
+        switcher.className = `custom-select conn-pill-switcher ${typeCls}`;
+        nameEl.textContent = conn.name;
+        typeEl.textContent = typeShort;
+
+        if (remarkEl) {
+            if (remarkText) {
+                remarkEl.textContent = remarkText;
+                remarkEl.title = `备注: ${remarkText} (${fallbackAddr})`;
+                remarkEl.classList.add('is-remark');
+                remarkEl.classList.remove('hidden');
+            } else {
+                remarkEl.textContent = fallbackAddr;
+                remarkEl.title = fallbackAddr;
+                remarkEl.classList.remove('is-remark');
+                remarkEl.classList.remove('hidden');
+            }
+        }
+
+        listEl.innerHTML = '';
+        connections.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'custom-select-option' + (c.id === currentConnId ? ' selected' : '');
+            const rHint = (c.remark || '').trim() ? ` · ${escapeHtml(c.remark.trim())}` : '';
+            item.innerHTML = `
+                <span class="custom-select-option-text">${escapeHtml(c.name)} <span class="card-type-tag ${connTypeClass(c.type)}" style="margin-left:4px;font-size:10.5px;padding:1px 6px;">${connTypeShort(c.type)}</span><span class="row-field-type">${rHint}</span></span>
+                <span class="custom-select-check">${SELECT_ICONS.check}</span>
+            `;
+            item.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                switcher.classList.remove('open');
+                if (c.id !== currentConnId) {
+                    await useConnection(c.id, currentView === 'sql' ? 'sql' : 'data');
+                }
+            });
+            listEl.appendChild(item);
+        });
+    });
+}
+
+/* ===== 按连接保存/恢复 P2 & P3 全量操作状态 ===== */
+function getConnLocalStateKey(connId) {
+    return `dbpage_conn_state_${connId}`;
+}
+
+function loadConnLocalState(connId) {
+    if (!connId) return {};
+    try {
+        return JSON.parse(localStorage.getItem(getConnLocalStateKey(connId)) || '{}') || {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function saveConnLocalState() {
+    if (!currentConnId) return;
+    const sqlInput = document.getElementById('sql-input');
+    const snapshot = {
+        db: state.db || '',
+        table: state.table || '',
+        page: state.page || 1,
+        size: state.size || 10,
+        sortCol: state.sortCol || '',
+        sortDir: state.sortDir || '',
+        filterCol: state.filterCol || '',
+        filterOp: state.filterOp || 'contains',
+        filterVal: state.filterVal || '',
+        hiddenCols: Array.from(state.hiddenCols || []),
+        equalWidth: Boolean(state.equalWidth),
+        sql: sqlInput ? sqlInput.value : ''
+    };
+    try {
+        localStorage.setItem(getConnLocalStateKey(currentConnId), JSON.stringify(snapshot));
+    } catch (_) {}
 }
 
 /* ===== 连接卡片 ===== */
@@ -457,9 +523,13 @@ function renderConnFilterTabs() {
 async function loadConnections() {
     const data = await fetchJSON('/api/connections');
     connections = data.connections;
+    if (currentConnId && !connections.some(c => c.id === currentConnId)) {
+        currentConnId = null;
+        if (currentView !== 'connections') showConnectionsView();
+    }
     renderConnFilterTabs();
     renderCards();
-    updateHeaderConnSwitcher();
+    updateActiveConnBadges();
 }
 
 function renderCards() {
@@ -476,6 +546,9 @@ function renderCards() {
         const typeLabel = connTypeLabel(c.type);
         const typeCls = connTypeClass(c.type);
         const metaAddr = c.user ? `${escapeHtml(c.user)}@${escapeHtml(c.host)}:${c.port}` : `${escapeHtml(c.host)}:${c.port}`;
+        const remarkHtml = (c.remark || '').trim()
+            ? `<div class="card-remark" title="${escapeHtml(c.remark.trim())}">${escapeHtml(c.remark.trim())}</div>`
+            : '';
         return `
         <div class="conn-card ${typeCls}" data-id="${escapeHtml(c.id)}">
             <div class="card-header">
@@ -490,6 +563,7 @@ function renderCards() {
             </div>
             <div class="card-name">${escapeHtml(c.name)}</div>
             <div class="card-meta">${metaAddr}</div>
+            ${remarkHtml}
         </div>
     `}).join('');
 
@@ -555,10 +629,12 @@ function updateFilterUIState() {
 
 function syncConnTypeLabels() {
     const isRedis = currentConnType === 'redis';
-    const labelNewQuery = document.getElementById('label-new-query');
+    const navSqlLabel = document.getElementById('nav-sql-label');
+    const sqlViewTitle = document.getElementById('sql-view-title');
     const labelAddRow = document.getElementById('label-add-row');
     const sqlLabel = document.getElementById('sql-editor-label');
-    if (labelNewQuery) labelNewQuery.textContent = isRedis ? '命令终端' : 'SQL 查询';
+    if (navSqlLabel) navSqlLabel.textContent = isRedis ? '命令终端' : 'SQL 查询';
+    if (sqlViewTitle) sqlViewTitle.textContent = isRedis ? '命令终端' : 'SQL 查询';
     if (labelAddRow) labelAddRow.textContent = isRedis ? '新增 Key' : '新增记录';
     if (sqlLabel) sqlLabel.textContent = isRedis ? 'Redis 命令终端' : 'SQL 编辑器';
 }
@@ -575,15 +651,50 @@ async function useConnection(id, targetView = 'data') {
     currentConnType = conn?.type || 'postgresql';
     syncConnTypeLabels();
 
-    const hist = initData.states?.[id] || {};
-    if (hist.sql) document.getElementById('sql-input').value = hist.sql;
-    state.db = hist.db || (currentConnType === 'redis' ? 'db0' : '');
-    state.table = hist.table || (currentConnType === 'redis' ? 'ALL' : '');
+    const serverHist = initData.states?.[id] || {};
+    const localHist = loadConnLocalState(id);
+
     resetTableViewState();
+    state.db = localHist.db || serverHist.db || (currentConnType === 'redis' ? 'db0' : '');
+    state.table = localHist.table || serverHist.table || (currentConnType === 'redis' ? 'ALL' : '');
+    state.page = Math.max(1, parseInt(localHist.page || 1, 10));
+    state.size = [10, 20, 50, 100, 500].includes(Number(localHist.size)) ? Number(localHist.size) : 10;
+    state.sortCol = localHist.sortCol || '';
+    state.sortDir = localHist.sortDir || '';
+    state.filterCol = localHist.filterCol || '';
+    state.filterOp = localHist.filterOp || 'contains';
+    state.filterVal = localHist.filterVal || '';
+    state.hiddenCols = new Set(Array.isArray(localHist.hiddenCols) ? localHist.hiddenCols : []);
+    state.equalWidth = Boolean(localHist.equalWidth);
+
+    const pageSizeSel = document.getElementById('page-size');
+    if (pageSizeSel) {
+        pageSizeSel.value = String(state.size);
+        syncCustomSelect(pageSizeSel);
+    }
+    document.getElementById('btn-equal-width')?.classList.toggle('active', state.equalWidth);
+
+    const filterOpSel = document.getElementById('filter-op-select');
+    const filterValInp = document.getElementById('filter-val-input');
+    if (filterOpSel) {
+        filterOpSel.value = state.filterOp;
+        syncCustomSelect(filterOpSel);
+    }
+    if (filterValInp) {
+        filterValInp.value = state.filterVal;
+        filterValInp.classList.toggle('hidden', state.filterOp === 'isnull' || state.filterOp === 'notnull');
+    }
+    updateFilterUIState();
+
+    const savedSql = localHist.sql || serverHist.sql || '';
+    const sqlInput = document.getElementById('sql-input');
+    if (sqlInput) {
+        sqlInput.value = savedSql;
+    }
 
     if (targetView === 'sql') {
         showSqlView();
-        populateSqlDefaultInput();
+        if (!savedSql) populateSqlDefaultInput();
     } else {
         showDataView();
     }
@@ -594,36 +705,45 @@ async function useConnection(id, targetView = 'data') {
 
 function showConnectionsView() {
     currentView = 'connections';
+    hideFloatingRowDel();
     document.getElementById('connections-view').classList.remove('hidden');
     document.getElementById('data-view').classList.add('hidden');
     document.getElementById('sql-view').classList.add('hidden');
-    state.db = '';
-    state.table = '';
-    resetTableViewState();
-    currentConnId = null;
-    currentConnType = 'postgresql';
-    updateHeaderConnSwitcher();
+    updateTopNav();
     updateUrlHash();
 }
 
 function showDataView() {
+    if (!currentConnId) {
+        showConnectionsView();
+        return;
+    }
     currentView = 'data';
     document.getElementById('connections-view').classList.add('hidden');
     document.getElementById('data-view').classList.remove('hidden');
     document.getElementById('sql-view').classList.add('hidden');
-    updateHeaderConnSwitcher();
+    updateActiveConnBadges();
     updateUrlHash();
 }
 
 function showSqlView() {
+    if (!currentConnId) {
+        showConnectionsView();
+        return;
+    }
     currentView = 'sql';
+    hideFloatingRowDel();
     document.getElementById('connections-view').classList.add('hidden');
     document.getElementById('data-view').classList.add('hidden');
     document.getElementById('sql-view').classList.remove('hidden');
-    updateHeaderConnSwitcher();
+    updateActiveConnBadges();
     updateUrlHash();
     loadSqlDatabases();
     renderQueryHistoryMenu();
+    const sqlInput = document.getElementById('sql-input');
+    if (sqlInput && !sqlInput.value.trim()) {
+        populateSqlDefaultInput();
+    }
 }
 
 /* ===== 连接弹窗 ===== */
@@ -651,6 +771,7 @@ function openAddModal() {
     document.getElementById('modal-port').value = '5432';
     document.getElementById('modal-user').value = '';
     document.getElementById('modal-password').value = '';
+    document.getElementById('modal-remark').value = '';
     hideTestResult();
     document.getElementById('conn-modal').classList.remove('hidden');
 }
@@ -669,6 +790,7 @@ function openEditModal(id) {
     document.getElementById('modal-port').value = c.port;
     document.getElementById('modal-user').value = c.user || '';
     document.getElementById('modal-password').value = c.password || '';
+    document.getElementById('modal-remark').value = c.remark || '';
     hideTestResult();
     document.getElementById('conn-modal').classList.remove('hidden');
 }
@@ -685,6 +807,7 @@ function buildConnFormBody() {
     body.append('port', document.getElementById('modal-port').value.trim() || '5432');
     body.append('user', document.getElementById('modal-user').value.trim());
     body.append('password', document.getElementById('modal-password').value);
+    body.append('remark', document.getElementById('modal-remark').value.trim());
     return body;
 }
 
@@ -899,6 +1022,7 @@ function renderColPickerList(filter = '') {
                 state.hiddenCols.delete(c);
             }
             updateColPickerLabel();
+            saveConnLocalState();
             if (state.lastTableData) renderDataTable(state.lastTableData);
         });
         const span = document.createElement('span');
@@ -910,7 +1034,7 @@ function renderColPickerList(filter = '') {
 }
 
 function syncTableColumnsUI(columns, colTypes = {}) {
-    const ids = ['col-picker', 'btn-equal-width', 'btn-toggle-filter', 'view-opts-picker', 'btn-refresh-data', 'btn-add-row', 'export-picker', 'toolbar-div-1'];
+    const ids = ['col-picker', 'btn-equal-width', 'btn-toggle-filter', 'view-opts-picker', 'btn-refresh-data', 'btn-add-row', 'export-picker', 'toolbar-div-1', 'toolbar-div-2'];
     const prevKey = state.allColumns.join('\0');
     const nextKey = columns.join('\0');
     state.allColumns = columns.slice();
@@ -1059,6 +1183,7 @@ function renderDataTable(data) {
                 state.sortDir = '';
             }
             state.page = 1;
+            saveConnLocalState();
             await loadData();
         });
     });
@@ -1527,7 +1652,7 @@ function renderPageNumbers() {
         btn.textContent = i;
         if (i === state.page) btn.classList.add('active');
         btn.addEventListener('click', async () => {
-            if (i !== state.page) { state.page = i; await loadData(); }
+            if (i !== state.page) { state.page = i; saveConnLocalState(); await loadData(); }
         });
         container.appendChild(btn);
     }
@@ -1741,6 +1866,7 @@ async function runSqlQuery() {
 
 async function saveState() {
     if (!currentConnId) return;
+    saveConnLocalState();
     const body = new URLSearchParams();
     if (state.db) body.append('db', state.db);
     if (state.table) body.append('table', state.table);
@@ -1813,12 +1939,22 @@ brandEl.addEventListener('keydown', (e) => {
     }
 });
 
-document.getElementById('header-conn-trigger').addEventListener('click', (e) => {
-    e.stopPropagation();
-    const switcher = document.getElementById('header-conn-switcher');
-    const isOpen = switcher.classList.contains('open');
-    closeAllCustomSelects(switcher);
-    switcher.classList.toggle('open', !isOpen);
+/* ===== 顶栏三页导航 & P2/P3 胶囊切换绑定 ===== */
+document.getElementById('nav-connections').addEventListener('click', showConnectionsView);
+document.getElementById('nav-data').addEventListener('click', showDataView);
+document.getElementById('nav-sql').addEventListener('click', showSqlView);
+
+['p2', 'p3'].forEach(prefix => {
+    const trigger = document.getElementById(`${prefix}-conn-trigger`);
+    const switcher = document.getElementById(`${prefix}-conn-switcher`);
+    if (trigger && switcher) {
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = switcher.classList.contains('open');
+            closeAllCustomSelects(switcher);
+            switcher.classList.toggle('open', !isOpen);
+        });
+    }
 });
 
 document.querySelectorAll('#conn-filter-tabs .conn-tab').forEach(btn => {
@@ -1833,7 +1969,6 @@ document.getElementById('btn-add-conn').addEventListener('click', openAddModal);
 document.getElementById('btn-test-conn').addEventListener('click', testModalConnection);
 document.getElementById('btn-cancel-conn').addEventListener('click', closeModal);
 document.getElementById('btn-save-conn').addEventListener('click', saveModal);
-document.getElementById('btn-back').addEventListener('click', showConnectionsView);
 
 document.getElementById('modal-type').addEventListener('change', (e) => {
     const t = e.target.value;
@@ -1996,6 +2131,7 @@ document.getElementById('btn-equal-width').addEventListener('click', () => {
     state.equalWidth = !state.equalWidth;
     state.colWidths = {};
     document.getElementById('btn-equal-width').classList.toggle('active', state.equalWidth);
+    saveConnLocalState();
     if (state.lastTableData) {
         renderDataTable(state.lastTableData);
     }
@@ -2026,6 +2162,7 @@ async function applyFieldFilter() {
     state.filterVal = val;
     state.page = 1;
     updateFilterUIState();
+    saveConnLocalState();
     await loadData();
 }
 
@@ -2047,32 +2184,33 @@ document.getElementById('btn-clear-filter').addEventListener('click', async () =
     syncCustomSelect(document.getElementById('filter-col-select'));
     syncCustomSelect(document.getElementById('filter-op-select'));
     updateFilterUIState();
+    saveConnLocalState();
     await loadData();
 });
 
 document.getElementById('page-size').addEventListener('change', async (e) => {
     state.size = parseInt(e.target.value, 10);
     state.page = 1;
+    saveConnLocalState();
     await loadData();
 });
 
-document.getElementById('btn-first').addEventListener('click', async () => { if (state.page > 1) { state.page = 1; await loadData(); } });
-document.getElementById('btn-prev').addEventListener('click', async () => { if (state.page > 1) { state.page--; await loadData(); } });
-document.getElementById('btn-next').addEventListener('click', async () => { if (state.page < state.pages) { state.page++; await loadData(); } });
-document.getElementById('btn-last').addEventListener('click', async () => { if (state.page < state.pages) { state.page = state.pages; await loadData(); } });
-
-document.getElementById('btn-new-query').addEventListener('click', () => {
-    showSqlView();
-    populateSqlDefaultInput();
-});
-
-document.getElementById('btn-back-data').addEventListener('click', () => {
-    showDataView();
-});
+document.getElementById('btn-first').addEventListener('click', async () => { if (state.page > 1) { state.page = 1; saveConnLocalState(); await loadData(); } });
+document.getElementById('btn-prev').addEventListener('click', async () => { if (state.page > 1) { state.page--; saveConnLocalState(); await loadData(); } });
+document.getElementById('btn-next').addEventListener('click', async () => { if (state.page < state.pages) { state.page++; saveConnLocalState(); await loadData(); } });
+document.getElementById('btn-last').addEventListener('click', async () => { if (state.page < state.pages) { state.page = state.pages; saveConnLocalState(); await loadData(); } });
 
 document.getElementById('sql-db-select').addEventListener('change', async (e) => {
     state.db = e.target.value;
     await saveState();
+});
+
+let sqlDraftTimer = null;
+document.getElementById('sql-input').addEventListener('input', () => {
+    if (sqlDraftTimer) clearTimeout(sqlDraftTimer);
+    sqlDraftTimer = setTimeout(() => {
+        saveConnLocalState();
+    }, 300);
 });
 
 document.getElementById('history-picker-trigger').addEventListener('click', (e) => {

@@ -1921,3 +1921,182 @@ tbody tr:hover .row-del-btn {
   color: var(--negative);
   border: 1px solid var(--negative-border);
 }
+
+/* Header Left & Integrated P1/P2/P3 Top Nav */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-nav-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border-strong);
+}
+
+.top-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.top-nav-item {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.top-nav-item:hover:not(.active) {
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+
+.top-nav-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: rgba(37, 99, 235, 0.2);
+}
+
+/* P2 / P3 Prominent Context Bar & Connection Pill */
+.view-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.view-context-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.view-context-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.conn-pill-switcher {
+  min-width: 0;
+}
+
+.conn-pill-btn {
+  height: 32px;
+  padding: 0 10px 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--db-border, rgba(37, 99, 235, 0.25));
+  background: var(--db-bg, var(--accent-soft));
+  color: var(--db-color, var(--accent));
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease), filter 0.15s var(--ease);
+}
+
+.conn-pill-btn:hover {
+  border-color: var(--db-hover-border, rgba(37, 99, 235, 0.55));
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.conn-pill-status {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.conn-pill-sep {
+  opacity: 0.45;
+}
+
+.conn-pill-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.conn-pill-type {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--db-color, var(--accent));
+  border-radius: 999px;
+  padding: 1px 7px;
+  line-height: 1.45;
+}
+
+.conn-pill-chevron {
+  opacity: 0.7;
+  transition: transform 0.18s var(--ease);
+}
+
+.conn-pill-switcher.open .conn-pill-chevron {
+  transform: rotate(180deg);
+}
+
+.conn-pill-menu {
+  left: 0;
+  right: auto;
+  min-width: 240px;
+}
+
+.conn-remark-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 420px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conn-remark-chip.is-remark {
+  background: #fffbeb;
+  border-color: rgba(217, 119, 6, 0.28);
+  color: #92400e;
+  font-weight: 500;
+}
+
+.data-toolbar-row {
+  margin-bottom: 16px;
+}
+
+/* Connection Card Remark */
+.card-remark {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

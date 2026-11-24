@@ -173,12 +173,13 @@ async def create_connection(
     port: int = Form(...),
     user: str = Form(""),
     password: str = Form(""),
+    remark: str = Form(""),
 ):
     data = load_init()
     with init_lock:
         conns = data["connections"]
         new_id = str(max([int(c["id"]) for c in conns if c["id"].isdigit()], default=0) + 1)
-        conns.append({"id": new_id, "name": name, "type": conn_type, "host": host, "port": port, "user": user, "password": password})
+        conns.append({"id": new_id, "name": name, "type": conn_type, "host": host, "port": port, "user": user, "password": password, "remark": remark})
         data["connections"] = conns
         save_init(data)
     return {"success": True, "id": new_id}
@@ -193,13 +194,14 @@ async def update_connection(
     port: int = Form(...),
     user: str = Form(""),
     password: str = Form(""),
+    remark: str = Form(""),
 ):
     data = load_init()
     with init_lock:
         conns = data["connections"]
         for c in conns:
             if c["id"] == conn_id:
-                c.update({"name": name, "type": conn_type, "host": host, "port": port, "user": user, "password": password})
+                c.update({"name": name, "type": conn_type, "host": host, "port": port, "user": user, "password": password, "remark": remark})
                 data["connections"] = conns
                 save_init(data)
                 return {"success": True}

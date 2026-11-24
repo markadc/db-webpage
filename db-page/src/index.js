@@ -315,7 +315,7 @@ app.get('/api/connections', (req, res) => {
 });
 
 app.post('/api/connections', (req, res) => {
-    const { name, conn_type, host, port, user, password } = req.body;
+    const { name, conn_type, host, port, user = '', password = '', remark = '' } = req.body;
     const data = loadInit();
     const conns = data.connections;
     const maxId = conns
@@ -323,7 +323,7 @@ app.post('/api/connections', (req, res) => {
         .map(c => parseInt(c.id, 10))
         .reduce((a, b) => Math.max(a, b), 0);
     const newId = String(maxId + 1);
-    conns.push({ id: newId, name, type: conn_type || 'postgresql', host, port: parseInt(port, 10), user, password });
+    conns.push({ id: newId, name, type: conn_type || 'postgresql', host, port: parseInt(port, 10), user, password, remark });
     data.connections = conns;
     saveInit(data);
     res.json({ success: true, id: newId });
@@ -331,7 +331,7 @@ app.post('/api/connections', (req, res) => {
 
 app.put('/api/connections/:conn_id', (req, res) => {
     const { conn_id } = req.params;
-    const { name, conn_type, host, port, user, password } = req.body;
+    const { name, conn_type, host, port, user = '', password = '', remark = '' } = req.body;
     const data = loadInit();
     const conns = data.connections;
     const conn = conns.find(c => c.id === conn_id);
@@ -344,6 +344,7 @@ app.put('/api/connections/:conn_id', (req, res) => {
     conn.port = parseInt(port, 10);
     conn.user = user;
     conn.password = password;
+    conn.remark = remark;
     data.connections = conns;
     saveInit(data);
     res.json({ success: true });
