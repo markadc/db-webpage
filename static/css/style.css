@@ -283,10 +283,10 @@ main {
 }
 
 .type-redis {
-  --db-color: #dc2626;
-  --db-bg: #fef2f2;
-  --db-border: rgba(220, 38, 38, 0.22);
-  --db-hover-border: rgba(220, 38, 38, 0.5);
+  --db-color: #059669;
+  --db-bg: #ecfdf5;
+  --db-border: rgba(5, 150, 105, 0.24);
+  --db-hover-border: rgba(5, 150, 105, 0.52);
 }
 
 .conn-header-left {
@@ -342,9 +342,9 @@ main {
 }
 
 .conn-tab[data-type="redis"].active {
-  background: #fef2f2;
-  color: #dc2626;
-  border-color: rgba(220, 38, 38, 0.24);
+  background: #ecfdf5;
+  color: #059669;
+  border-color: rgba(5, 150, 105, 0.24);
 }
 
 .conn-tab-count {
@@ -2016,37 +2016,42 @@ tbody tr:hover .row-del-btn {
   height: 32px;
   padding: 0 10px 0 12px;
   border-radius: 999px;
-  border: 1px solid var(--db-border, rgba(37, 99, 235, 0.25));
-  background: var(--db-bg, var(--accent-soft));
-  color: var(--db-color, var(--accent));
+  border: 1px solid transparent;
+  background: var(--db-color, var(--accent));
+  color: #ffffff;
   font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease), filter 0.15s var(--ease);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  transition: filter 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
 
 .conn-pill-btn:hover {
-  border-color: var(--db-hover-border, rgba(37, 99, 235, 0.55));
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  filter: brightness(0.93);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
+}
+
+.conn-pill-btn .conn-live-dot {
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.28);
 }
 
 .conn-pill-status {
   font-size: 12px;
-  font-weight: 500;
-  opacity: 0.85;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .conn-pill-sep {
-  opacity: 0.45;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .conn-pill-name {
-  color: var(--text);
+  color: #ffffff;
   font-weight: 600;
 }
 
@@ -2055,14 +2060,14 @@ tbody tr:hover .row-del-btn {
   font-size: 11px;
   font-weight: 600;
   color: #ffffff;
-  background: var(--db-color, var(--accent));
+  background: rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   padding: 1px 7px;
   line-height: 1.45;
 }
 
 .conn-pill-chevron {
-  opacity: 0.7;
+  color: rgba(255, 255, 255, 0.85);
   transition: transform 0.18s var(--ease);
 }
 

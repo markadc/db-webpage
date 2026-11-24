@@ -632,14 +632,10 @@ function updateFilterUIState() {
 
 function syncConnTypeLabels() {
     const isRedis = currentConnType === 'redis';
-    const navSqlLabel = document.getElementById('nav-sql-label');
-    const sqlViewTitle = document.getElementById('sql-view-title');
     const labelAddRow = document.getElementById('label-add-row');
     const sqlLabel = document.getElementById('sql-editor-label');
-    if (navSqlLabel) navSqlLabel.textContent = isRedis ? '命令终端' : 'SQL 查询';
-    if (sqlViewTitle) sqlViewTitle.textContent = isRedis ? '命令终端' : 'SQL 查询';
     if (labelAddRow) labelAddRow.textContent = isRedis ? '新增 Key' : '新增记录';
-    if (sqlLabel) sqlLabel.textContent = isRedis ? 'Redis 命令终端' : 'SQL 编辑器';
+    if (sqlLabel) sqlLabel.textContent = isRedis ? 'Redis 命令' : 'SQL 编辑器';
 }
 
 async function useConnection(id, targetView = 'data') {
