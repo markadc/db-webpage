@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DBPage</title>
     <link rel="icon" type="image/png" href="/static/database.png">
-    <link rel="stylesheet" href="/static/css/style.css?v=10">
+    <link rel="stylesheet" href="/static/css/style.css?v=12">
 </head>
 
 <body>
@@ -119,6 +119,30 @@
                         <span>筛选</span>
                         <span id="filter-badge" class="filter-badge hidden"></span>
                     </button>
+                    <!-- 视图显示设置下拉 -->
+                    <div id="view-opts-picker" class="custom-select view-opts-picker hidden">
+                        <button type="button" id="view-opts-trigger" class="btn-secondary" title="表格显示设置">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>
+                            <span>视图</span>
+                        </button>
+                        <div class="custom-select-menu view-opts-menu">
+                            <div class="view-opts-list">
+                                <label class="view-opt-item">
+                                    <span>表头字段类型</span>
+                                    <input type="checkbox" id="opt-show-col-types" class="toggle-input">
+                                    <span class="toggle-track"></span>
+                                </label>
+                                <label class="view-opt-item">
+                                    <span>显示左侧行号 #</span>
+                                    <input type="checkbox" id="opt-show-row-index" class="toggle-input">
+                                    <span class="toggle-track"></span>
+                                </label>
+                            </div>
+                            <div class="view-opt-footer">
+                                单击复制 · 双击编辑 · 悬停右侧展开详情
+                            </div>
+                        </div>
+                    </div>
 
                     <span id="toolbar-div-2" class="toolbar-divider" aria-hidden="true"></span>
 
@@ -166,21 +190,23 @@
                 <button type="button" id="btn-clear-filter" class="btn-secondary">重置</button>
             </div>
 
-            <div id="table-wrap" class="table-wrap">
-                <table id="data-table">
-                    <thead></thead>
-                    <tbody></tbody>
-                </table>
+            <div id="data-table-stage" class="table-stage">
+                <div id="table-wrap" class="table-wrap">
+                    <table id="data-table">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <button type="button" id="floating-row-del" class="floating-row-del hidden" title="删除此行" aria-label="删除此行">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                </button>
             </div>
 
             <div class="pagination hidden" id="pagination">
-                <div class="page-info-group">
-                    <div class="page-info">
-                        第 <span id="page-num">1</span> / <span id="page-total">1</span> 页
-                        <span class="page-info-sep">·</span>
-                        共 <span id="row-total">0</span> 条
-                    </div>
-                    <span class="interaction-hint">单击复制 · 双击编辑 · 悬停右侧展开详情</span>
+                <div class="page-info">
+                    第 <span id="page-num">1</span> / <span id="page-total">1</span> 页
+                    <span class="page-info-sep">·</span>
+                    共 <span id="row-total">0</span> 条
                 </div>
                 <div class="page-pills" id="page-pills">
                     <button type="button" id="btn-first" aria-label="首页">
@@ -361,7 +387,7 @@
         </div>
     </main>
     <div id="toast" class="toast hidden">已复制</div>
-    <script src="/static/js/app.js?v=20"></script>
+    <script src="/static/js/app.js?v=22"></script>
 </body>
 
 </html>

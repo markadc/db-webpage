@@ -27,6 +27,33 @@ let initData = {};
 let cellModalCtx = null;
 let connFilterType = 'all';
 
+const VIEW_PREFS_KEY = 'dbpage_view_prefs';
+let viewPrefs = loadViewPrefs();
+
+function loadViewPrefs() {
+    const defaults = { showColTypes: false, showRowIndex: false };
+    try {
+        const raw = localStorage.getItem(VIEW_PREFS_KEY);
+        if (!raw) return defaults;
+        return { ...defaults, ...JSON.parse(raw) };
+    } catch (_) {
+        return defaults;
+    }
+}
+
+function saveViewPrefs() {
+    try {
+        localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify(viewPrefs));
+    } catch (_) {}
+}
+
+function syncViewPrefsUI() {
+    const cbTypes = document.getElementById('opt-show-col-types');
+    const cbIndex = document.getElementById('opt-show-row-index');
+    if (cbTypes) cbTypes.checked = Boolean(viewPrefs.showColTypes);
+    if (cbIndex) cbIndex.checked = Boolean(viewPrefs.showRowIndex);
+}
+
 const SELECT_ICONS = {
     db: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>',
     pg: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>',
@@ -49,7 +76,7 @@ function closeAllCustomSelects(except = null) {
     customSelectInstances.forEach(inst => {
         if (inst !== except) inst.close();
     });
-    ['col-picker', 'export-picker', 'history-picker', 'header-conn-switcher'].forEach(id => {
+    ['col-picker', 'export-picker', 'history-picker', 'header-conn-switcher', 'view-opts-picker'].forEach(id => {
         const el = document.getElementById(id);
         if (el && except !== el) el.classList.remove('open');
     });
@@ -883,7 +910,7 @@ function renderColPickerList(filter = '') {
 }
 
 function syncTableColumnsUI(columns, colTypes = {}) {
-    const ids = ['col-picker', 'btn-equal-width', 'btn-toggle-filter', 'btn-refresh-data', 'btn-add-row', 'export-picker', 'toolbar-div-1'];
+    const ids = ['col-picker', 'btn-equal-width', 'btn-toggle-filter', 'view-opts-picker', 'btn-refresh-data', 'btn-add-row', 'export-picker', 'toolbar-div-1'];
     const prevKey = state.allColumns.join('\0');
     const nextKey = columns.join('\0');
     state.allColumns = columns.slice();
@@ -942,7 +969,60 @@ function renderCellInnerHtml(val, colName = '') {
     return `<span class="cell-text">${escapeHtml(formatted)}</span>${expandBtn}`;
 }
 
+/* ===== 行外侧悬浮删除按钮 ===== */
+let floatingDelTarget = null;
+let hideFloatingDelTimer = null;
+
+function hideFloatingRowDel() {
+    if (hideFloatingDelTimer) {
+        clearTimeout(hideFloatingDelTimer);
+        hideFloatingDelTimer = null;
+    }
+    const btn = document.getElementById('floating-row-del');
+    if (btn) btn.classList.add('hidden');
+    if (floatingDelTarget?.tr) {
+        floatingDelTarget.tr.classList.remove('row-del-target');
+    }
+    floatingDelTarget = null;
+}
+
+function scheduleHideFloatingRowDel() {
+    if (hideFloatingDelTimer) clearTimeout(hideFloatingDelTimer);
+    hideFloatingDelTimer = setTimeout(hideFloatingRowDel, 180);
+}
+
+function showFloatingRowDel(tr, pkColumn, pkVal) {
+    if (hideFloatingDelTimer) {
+        clearTimeout(hideFloatingDelTimer);
+        hideFloatingDelTimer = null;
+    }
+    const stage = document.getElementById('data-table-stage');
+    const wrap = document.getElementById('table-wrap');
+    const btn = document.getElementById('floating-row-del');
+    if (!stage || !wrap || !btn) return;
+
+    const stageRect = stage.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const trRect = tr.getBoundingClientRect();
+    const centerY = trRect.top + trRect.height / 2;
+    if (centerY < wrapRect.top + 36 || centerY > wrapRect.bottom) {
+        hideFloatingRowDel();
+        return;
+    }
+
+    if (floatingDelTarget?.tr && floatingDelTarget.tr !== tr) {
+        floatingDelTarget.tr.classList.remove('row-del-target');
+    }
+    tr.classList.add('row-del-target');
+    floatingDelTarget = { tr, pkColumn, pkVal };
+
+    btn.style.top = `${Math.round(centerY - stageRect.top)}px`;
+    btn.classList.toggle('dock-inside', window.innerWidth - stageRect.right < 42);
+    btn.classList.remove('hidden');
+}
+
 function renderDataTable(data) {
+    hideFloatingRowDel();
     const tableEl = document.getElementById('data-table');
     const thead = tableEl.querySelector('thead');
     const tbody = tableEl.querySelector('tbody');
@@ -951,14 +1031,19 @@ function renderDataTable(data) {
     const colTypes = data.column_types || {};
     tableEl.classList.toggle('equal-width', Boolean(state.equalWidth && visibleCols.length > 0));
 
-    thead.innerHTML = '<tr><th class="row-index-col">#</th>' + visibleCols.map(c => {
+    const showIndex = Boolean(viewPrefs.showRowIndex);
+    const showTypes = Boolean(viewPrefs.showColTypes);
+
+    const indexTh = showIndex ? '<th class="row-index-col">#</th>' : '';
+
+    thead.innerHTML = '<tr>' + indexTh + visibleCols.map(c => {
         const isSorted = state.sortCol === c;
         const dirClass = isSorted ? (state.sortDir === 'desc' ? ' sort-active sort-desc' : ' sort-active sort-asc') : '';
         const isPk = data.pk && data.pk === c;
-        const pkBadge = isPk ? `<span class="pk-icon" title="主键列 (Primary Key)">${SELECT_ICONS.pk}</span>` : '';
-        const typeSub = colTypes[c] ? `<span class="col-type-sub">${escapeHtml(colTypes[c])}</span>` : '';
-        return `<th class="sortable${dirClass}" data-col="${escapeHtml(c)}"${colWidthStyle(state.colWidths, c, equalCount)} title="点击切换排序"><span class="th-inner"><span class="th-col-stack"><span class="th-col-name">${pkBadge}<span>${escapeHtml(c)}</span></span>${typeSub}</span><span class="sort-icon"><span class="sort-arrow up"></span><span class="sort-arrow down"></span></span></span><span class="col-resizer" title="左右拖动调整列宽"></span></th>`;
-    }).join('') + '<th class="row-action-col" title="操作"></th></tr>';
+        const pkBadge = (isPk && showTypes) ? '<span class="pk-badge" title="主键列 (Primary Key)">PK</span>' : '';
+        const typeSub = (showTypes && colTypes[c]) ? `<span class="col-type-sub">${escapeHtml(colTypes[c])}</span>` : '';
+        return `<th class="sortable${dirClass}" data-col="${escapeHtml(c)}"${colWidthStyle(state.colWidths, c, equalCount)} title="点击切换排序"><span class="th-inner"><span class="th-col-stack"><span class="th-col-name"><span>${escapeHtml(c)}</span>${pkBadge}</span>${typeSub}</span><span class="sort-icon"><span class="sort-arrow up"></span><span class="sort-arrow down"></span></span></span><span class="col-resizer" title="左右拖动调整列宽"></span></th>`;
+    }).join('') + '</tr>';
 
     thead.querySelectorAll('th.sortable').forEach(th => {
         th.addEventListener('click', async (e) => {
@@ -985,17 +1070,25 @@ function renderDataTable(data) {
         const rowOffset = (state.page - 1) * state.size;
         tbody.innerHTML = data.data.map((row, rIdx) => {
             const seq = rowOffset + rIdx + 1;
+            const indexTd = showIndex ? `<td class="row-index-col">${seq}</td>` : '';
             const cellsHtml = visibleCols.map(c => {
                 const rawVal = row[c];
                 const isNull = rawVal === null || rawVal === undefined;
                 return `<td class="editable-cell" data-isnull="${isNull ? '1' : '0'}"${colWidthStyle(state.colWidths, c, equalCount)}>${renderCellInnerHtml(rawVal, c)}</td>`;
             }).join('');
-            return `<tr><td class="row-index-col">${seq}</td>${cellsHtml}<td class="row-action-col"><button type="button" class="row-del-btn" title="删除此行" aria-label="删除此行">${SELECT_ICONS.trash}</button></td></tr>`;
+            return `<tr>${indexTd}${cellsHtml}</tr>`;
         }).join('');
 
         tbody.querySelectorAll('tr').forEach((tr, rowIdx) => {
             const rowObj = data.data[rowIdx];
             const pkVal = rowObj[pkColumn];
+
+            tr.addEventListener('mouseenter', () => {
+                showFloatingRowDel(tr, pkColumn, pkVal);
+            });
+            tr.addEventListener('mouseleave', () => {
+                scheduleHideFloatingRowDel();
+            });
 
             tr.querySelectorAll('td.editable-cell').forEach((td, colIdx) => {
                 const colName = visibleCols[colIdx];
@@ -1038,25 +1131,6 @@ function renderDataTable(data) {
                     if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
                     startEdit(td, state.db, state.table, pkColumn);
                 });
-            });
-
-            tr.querySelector('.row-del-btn')?.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (pkVal === null || pkVal === undefined || pkVal === '') {
-                    showAlert('当前行缺少有效主键值，无法直接按主键删除');
-                    return;
-                }
-                const targetDesc = `${pkColumn} = ${pkVal}`;
-                showConfirm(`确定删除此条记录 (${targetDesc})？`, async () => {
-                    try {
-                        const q = `db=${encodeURIComponent(state.db)}&table=${encodeURIComponent(state.table)}&pk_col=${encodeURIComponent(pkColumn)}&pk_val=${encodeURIComponent(String(pkVal))}`;
-                        await fetchJSON(`/api/data?${q}`, { method: 'DELETE' });
-                        showToast('已删除');
-                        await loadData();
-                    } catch (err) {
-                        showAlert('删除失败: ' + err.message);
-                    }
-                }, null, { confirmText: '删除', danger: true });
             });
         });
     }
@@ -1613,15 +1687,19 @@ async function runSqlQuery() {
         document.getElementById('btn-export-sql-json').classList.toggle('hidden', !hasRows);
 
         if (data.columns.length) {
-            thead.innerHTML = '<tr><th class="row-index-col">#</th>' + data.columns.map(c => `<th data-col="${escapeHtml(c)}"><span class="th-inner"><span class="th-col-name">${escapeHtml(c)}</span></span><span class="col-resizer" title="左右拖动调整列宽"></span></th>`).join('') + '</tr>';
+            const sqlIndexTh = viewPrefs.showRowIndex ? '<th class="row-index-col">#</th>' : '';
+            thead.innerHTML = '<tr>' + sqlIndexTh + data.columns.map(c => `<th data-col="${escapeHtml(c)}"><span class="th-inner"><span class="th-col-name">${escapeHtml(c)}</span></span><span class="col-resizer" title="左右拖动调整列宽"></span></th>`).join('') + '</tr>';
             if (!data.data.length) {
                 tbody.innerHTML = `<tr><td colspan="100" class="empty">${emptyHtml('查询结果为空')}</td></tr>`;
             } else {
-                tbody.innerHTML = data.data.map((row, rIdx) => `<tr><td class="row-index-col">${rIdx + 1}</td>` + data.columns.map(c => {
-                    const rawVal = row[c];
-                    const isNull = rawVal === null || rawVal === undefined;
-                    return `<td class="copyable-cell" data-isnull="${isNull ? '1' : '0'}">${renderCellInnerHtml(rawVal, c)}</td>`;
-                }).join('') + '</tr>').join('');
+                tbody.innerHTML = data.data.map((row, rIdx) => {
+                    const sqlIndexTd = viewPrefs.showRowIndex ? `<td class="row-index-col">${rIdx + 1}</td>` : '';
+                    return `<tr>${sqlIndexTd}` + data.columns.map(c => {
+                        const rawVal = row[c];
+                        const isNull = rawVal === null || rawVal === undefined;
+                        return `<td class="copyable-cell" data-isnull="${isNull ? '1' : '0'}">${renderCellInnerHtml(rawVal, c)}</td>`;
+                    }).join('') + '</tr>';
+                }).join('');
 
                 tbody.querySelectorAll('tr').forEach((tr, rIdx) => {
                     const rowObj = data.data[rIdx];
@@ -2062,8 +2140,69 @@ function initCustomSelects() {
     createCustomSelect(document.getElementById('filter-op-select'));
 }
 
+/* 视图设置开关事件 */
+document.getElementById('view-opts-trigger').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const picker = document.getElementById('view-opts-picker');
+    const isOpen = picker.classList.contains('open');
+    closeAllCustomSelects(picker);
+    picker.classList.toggle('open', !isOpen);
+});
+
+document.getElementById('view-opts-picker').querySelector('.view-opts-menu').addEventListener('click', (e) => {
+    e.stopPropagation();
+});
+
+document.getElementById('opt-show-col-types').addEventListener('change', (e) => {
+    viewPrefs.showColTypes = e.target.checked;
+    saveViewPrefs();
+    if (state.lastTableData) renderDataTable(state.lastTableData);
+});
+
+document.getElementById('opt-show-row-index').addEventListener('change', (e) => {
+    viewPrefs.showRowIndex = e.target.checked;
+    saveViewPrefs();
+    if (state.lastTableData) renderDataTable(state.lastTableData);
+});
+
+/* 行外侧悬浮删除按钮事件 */
+const floatingDelBtn = document.getElementById('floating-row-del');
+floatingDelBtn.addEventListener('mouseenter', () => {
+    if (hideFloatingDelTimer) {
+        clearTimeout(hideFloatingDelTimer);
+        hideFloatingDelTimer = null;
+    }
+});
+floatingDelBtn.addEventListener('mouseleave', () => {
+    scheduleHideFloatingRowDel();
+});
+floatingDelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!floatingDelTarget) return;
+    const { pkColumn, pkVal } = floatingDelTarget;
+    if (pkVal === null || pkVal === undefined || pkVal === '') {
+        showAlert('当前行缺少有效主键值，无法直接按主键删除');
+        return;
+    }
+    const targetDesc = `${pkColumn} = ${pkVal}`;
+    hideFloatingRowDel();
+    showConfirm(`确定删除此条记录 (${targetDesc})？`, async () => {
+        try {
+            const q = `db=${encodeURIComponent(state.db)}&table=${encodeURIComponent(state.table)}&pk_col=${encodeURIComponent(pkColumn)}&pk_val=${encodeURIComponent(String(pkVal))}`;
+            await fetchJSON(`/api/data?${q}`, { method: 'DELETE' });
+            showToast('已删除');
+            await loadData();
+        } catch (err) {
+            showAlert('删除失败: ' + err.message);
+        }
+    }, null, { confirmText: '删除', danger: true });
+});
+
+document.getElementById('table-wrap').addEventListener('scroll', hideFloatingRowDel);
+
 async function init() {
     initCustomSelects();
+    syncViewPrefsUI();
     initData = await fetchJSON('/api/init');
     await loadConnections();
 
