@@ -186,15 +186,15 @@ function createCustomSelect(selectEl, opts = {}) {
 
         const allOptions = Array.from(selectEl.options);
         const filtered = allOptions.filter(opt => {
-            if (!keyword) return true;
             if (opt.value === '') return false;
+            if (!keyword) return true;
             return opt.textContent.toLowerCase().includes(keyword);
         });
 
         if (!filtered.length) {
             const emptyEl = document.createElement('div');
             emptyEl.className = 'custom-select-empty';
-            emptyEl.textContent = '无匹配结果';
+            emptyEl.textContent = keyword ? '无匹配结果' : '暂无可选项';
             optionsList.appendChild(emptyEl);
             return;
         }
