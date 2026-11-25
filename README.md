@@ -1,7 +1,7 @@
 # 🗃️ DBPage
 
 <p align="center">
-  <img src="dbpage-home.png" width="700" alt="DBPage Preview">
+  <img src="assets/home.png" width="700" alt="DBPage Preview">
 </p>
 
 <p align="center">
@@ -96,7 +96,7 @@ chmod +x start.sh
 ## 📁 项目结构
 
 ```
-DBPage/
+db-webpage/
 ├── 📄 main.py              # Python FastAPI 后端入口
 ├── 📄 requirements.txt     # Python 依赖
 ├── 📄 start.sh             # 一键启动脚本
@@ -105,13 +105,14 @@ DBPage/
 ├── 📁 static/
 │   ├── 📁 css/style.css    # 样式文件
 │   └── 📁 js/app.js        # 前端逻辑
-├── 📁 db-page/             # npm 包 (db-webpage / dbw CLI)
+├── 📁 db-webpage/          # npm 包 (db-webpage / dbw CLI)
 │   ├── 📄 package.json
 │   ├── 📁 src/index.js     # Express 后端与 CLI 入口
 │   └── 📄 README.md        # npm 包说明文档
-├── 🖼️ dbpage-home.png
-├── 🖼️ dbpage-view-data.png
-├── 🖼️ dbpage-exec-sql.png
+├── 📁 assets/
+│   ├── 🖼️ home.png
+│   ├── 🖼️ view-data.png
+│   └── 🖼️ exec-sql.png
 └── 📄 README.md
 ```
 
@@ -126,7 +127,7 @@ DBPage/
 3. 填写主机、端口、账号与备注，点击「测试连接」验证后保存
 4. 点击连接卡片进入「数据浏览」，后续可直接在顶栏胶囊切换其他连接
 
-![连接管理](dbpage-home.png)
+![连接管理](assets/home.png)
 
 ### 📊 浏览与编辑数据
 
@@ -134,7 +135,7 @@ DBPage/
 2. 支持分页（10 / 20 / 50 / 100 / 500）、列排序、条件筛选、列显示控制与平分宽度
 3. 单元格支持单击复制、双击编辑，悬停右侧可展开多行 JSON / NULL 编辑弹窗，鼠标移至行外左侧/右侧可快速删除当前行
 
-![数据浏览](dbpage-view-data.png)
+![数据浏览](assets/view-data.png)
 
 ### 📝 执行 SQL / Redis 命令
 
@@ -142,7 +143,7 @@ DBPage/
 2. 输入 SQL 或 Redis 命令（如 `SELECT * FROM table_name LIMIT 10` 或 `KEYS *`）
 3. 点击「执行」或按 `Cmd/Ctrl + Enter` 运行，支持导出 CSV / JSON 与历史命令回填
 
-![SQL 执行](dbpage-exec-sql.png)
+![SQL 执行](assets/exec-sql.png)
 
 ---
 
