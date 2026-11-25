@@ -1,4 +1,4 @@
-# 🗃️ DBPage
+# 🗃️ db-webpage
 
 <p align="center">
   <img src="assets/home.png" width="700" alt="DBPage Preview">
