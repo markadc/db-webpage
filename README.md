@@ -1,4 +1,4 @@
-# 🗃️ DBPage
+# 🗃️ db-webpage
 
 <p align="center">
   <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
