@@ -51,8 +51,8 @@ dbw -h, --help        # 查看帮助信息
 #### 1. 克隆项目
 
 ```bash
-git clone https://github.com/markadc/dbpage.git
-cd dbpage
+git clone https://github.com/markadc/db-webpage.git
+cd db-webpage
 ```
 
 #### 2. 启动服务
