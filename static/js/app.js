@@ -743,12 +743,45 @@ function showSqlView() {
     }
 }
 
-/* ===== 连接弹窗 ===== */
+/* ===== 连接弹窗 (两步式：先选类型 -> 再填紧凑表单) ===== */
+const CONN_TYPE_META = {
+    postgresql: { label: 'PostgreSQL', defaultPort: '5432', defaultUser: 'postgres' },
+    mysql: { label: 'MySQL', defaultPort: '3306', defaultUser: 'root' },
+    redis: { label: 'Redis', defaultPort: '6379', defaultUser: '' }
+};
+
 function syncModalFieldHints(connType) {
     const isRedis = connType === 'redis';
     document.getElementById('modal-user-hint').classList.toggle('hidden', !isRedis);
     document.getElementById('modal-pwd-hint').classList.toggle('hidden', !isRedis);
-    document.getElementById('modal-user').placeholder = isRedis ? '默认留空' : (connType === 'mysql' ? 'root' : 'postgres');
+    document.getElementById('modal-user').placeholder = isRedis ? '默认留空' : (CONN_TYPE_META[connType]?.defaultUser || 'postgres');
+}
+
+function syncModalTypeBadge(connType) {
+    const badge = document.getElementById('modal-type-badge');
+    if (!badge) return;
+    const t = CONN_TYPE_META[connType] ? connType : 'postgresql';
+    badge.className = `conn-type-badge type-${t}`;
+    badge.textContent = CONN_TYPE_META[t].label;
+}
+
+function showConnStep(step) {
+    const isTypeStep = step === 'type';
+    document.getElementById('conn-step-type').classList.toggle('hidden', !isTypeStep);
+    document.getElementById('conn-step-form').classList.toggle('hidden', isTypeStep);
+}
+
+function selectConnType(connType, { preserveExisting = false } = {}) {
+    const t = CONN_TYPE_META[connType] ? connType : 'postgresql';
+    document.getElementById('modal-type').value = t;
+    syncModalTypeBadge(t);
+    syncModalFieldHints(t);
+    if (!preserveExisting) {
+        document.getElementById('modal-port').value = CONN_TYPE_META[t].defaultPort;
+    }
+    hideTestResult();
+    showConnStep('form');
+    requestAnimationFrame(() => document.getElementById('modal-name').focus());
 }
 
 function hideTestResult() {
@@ -762,14 +795,13 @@ function openAddModal() {
     document.getElementById('modal-conn-id').value = '';
     document.getElementById('modal-name').value = '';
     document.getElementById('modal-type').value = 'postgresql';
-    syncCustomSelect(document.getElementById('modal-type'));
-    syncModalFieldHints('postgresql');
     document.getElementById('modal-host').value = 'localhost';
     document.getElementById('modal-port').value = '5432';
     document.getElementById('modal-user').value = '';
     document.getElementById('modal-password').value = '';
     document.getElementById('modal-remark').value = '';
     hideTestResult();
+    showConnStep('type');
     document.getElementById('conn-modal').classList.remove('hidden');
 }
 
@@ -780,15 +812,12 @@ function openEditModal(id) {
     document.getElementById('modal-title').textContent = '编辑连接';
     document.getElementById('modal-conn-id').value = c.id;
     document.getElementById('modal-name').value = c.name;
-    document.getElementById('modal-type').value = t;
-    syncCustomSelect(document.getElementById('modal-type'));
-    syncModalFieldHints(t);
     document.getElementById('modal-host').value = c.host;
     document.getElementById('modal-port').value = c.port;
     document.getElementById('modal-user').value = c.user || '';
     document.getElementById('modal-password').value = c.password || '';
     document.getElementById('modal-remark').value = c.remark || '';
-    hideTestResult();
+    selectConnType(t, { preserveExisting: true });
     document.getElementById('conn-modal').classList.remove('hidden');
 }
 
@@ -1963,13 +1992,18 @@ document.querySelectorAll('#conn-filter-tabs .conn-tab').forEach(btn => {
 document.getElementById('btn-add-conn').addEventListener('click', openAddModal);
 document.getElementById('btn-test-conn').addEventListener('click', testModalConnection);
 document.getElementById('btn-cancel-conn').addEventListener('click', closeModal);
-document.getElementById('btn-save-conn').addEventListener('click', saveModal);
-
-document.getElementById('modal-type').addEventListener('change', (e) => {
-    const t = e.target.value;
-    document.getElementById('modal-port').value = t === 'mysql' ? '3306' : (t === 'redis' ? '6379' : '5432');
-    syncModalFieldHints(t);
+document.getElementById('btn-close-conn-type').addEventListener('click', closeModal);
+document.getElementById('btn-close-conn-form').addEventListener('click', closeModal);
+document.getElementById('btn-back-conn-type').addEventListener('click', () => {
     hideTestResult();
+    showConnStep('type');
+});
+document.getElementById('btn-save-conn').addEventListener('click', saveModal);
+document.querySelectorAll('#conn-step-type .db-type-option').forEach(btn => {
+    btn.addEventListener('click', () => selectConnType(btn.dataset.type));
+});
+document.getElementById('conn-modal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal();
 });
 
 document.getElementById('db-select').addEventListener('change', async (e) => {
@@ -2265,7 +2299,6 @@ function initCustomSelects() {
         upward: true,
         compact: true
     });
-    createCustomSelect(document.getElementById('modal-type'));
     createCustomSelect(document.getElementById('filter-col-select'), {
         searchable: true,
         searchPlaceholder: '搜索字段'

@@ -1928,6 +1928,177 @@ tbody tr:hover .row-del-btn {
   border: 1px solid var(--negative-border);
 }
 
+/* Two-step Compact Connection Modal */
+.conn-modal-content {
+  width: 480px;
+  padding: 20px 24px 24px;
+}
+
+.conn-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.conn-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.conn-modal-title-group h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.conn-modal-sub {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.conn-modal-back,
+.conn-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.conn-modal-back:hover,
+.conn-modal-close:hover {
+  background: var(--surface-subtle);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.db-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.db-type-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease), transform 0.12s var(--ease);
+}
+
+.db-type-option:hover {
+  background: var(--surface-subtle);
+  border-color: var(--db-hover-border);
+}
+
+.db-type-option:active {
+  transform: scale(0.98);
+}
+
+.db-type-option:focus-visible {
+  outline: none;
+  border-color: var(--db-color);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.db-type-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--db-color);
+  color: #ffffff;
+}
+
+.db-type-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.db-type-port {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.conn-type-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--db-bg);
+  color: var(--db-color);
+  border: 1px solid var(--db-border);
+}
+
+.conn-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.conn-form-grid .field {
+  margin-bottom: 0;
+}
+
+.conn-form-grid .field input {
+  height: 36px;
+}
+
+.conn-form-row-host {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+
+.conn-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.conn-modal-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .db-type-grid {
+    grid-template-columns: 1fr;
+  }
+  .conn-form-grid,
+  .conn-form-row-host {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Header Left & Integrated P1/P2/P3 Top Nav */
 .header-left {
   display: flex;
